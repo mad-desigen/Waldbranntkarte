@@ -1,4 +1,4 @@
-name: DWD-Daten aktualisieren und Website veröffentlichen
+name: DWD-Daten prüfen, aktualisieren und Website veröffentlichen
 
 on:
   push:
@@ -32,15 +32,65 @@ jobs:
       - name: Python-Abhängigkeiten installieren
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
-      - name: Statische Website vorbereiten
+      - name: Statische Website vorbereiten und Maskenfehler korrigieren
         run: |
           rm -rf site
           mkdir -p site/data
           cp index.html site/index.html
+          cp smoke-test.js site/smoke-test.js
           touch site/.nojekyll
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('site/index.html')
+          text = path.read_text(encoding='utf-8')
+          wrong = "w=Math.round(h*((east-west)*Math.PI/180)/(sy-ny))"
+          fixed = "w=Math.max(320,Math.round(h*((east-west)*Math.PI/180)/(ny-sy)))"
+          if wrong not in text:
+              raise SystemExit('Erwartete fehlerhafte Canvas-Breitenberechnung wurde nicht gefunden.')
+          text = text.replace(wrong, fixed, 1)
+          if '</body>' not in text:
+              raise SystemExit('Schließendes body-Tag fehlt.')
+          text = text.replace('</body>', '<script src="smoke-test.js"></script></body>', 1)
+          path.write_text(text, encoding='utf-8')
+          PY
 
       - name: Aktuelle DWD-Daten abrufen
         run: python scripts/update_data.py --output site/data
+
+      - name: Vollständigen Browser-Funktionstest ausführen
+        run: |
+          python -m http.server 8000 --directory site >/tmp/wbi-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          sleep 2
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME" ]; then
+            echo "Kein Chrome/Chromium auf dem Runner gefunden."
+            exit 1
+          fi
+          "$CHROME" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --virtual-time-budget=90000 \
+            --dump-dom \
+            "http://127.0.0.1:8000/?smoketest=1" \
+            > /tmp/wbi-smoke-dom.html
+          if ! grep -q 'data-smoke="ok"' /tmp/wbi-smoke-dom.html; then
+            echo "Browser-Funktionstest fehlgeschlagen."
+            grep -o 'data-smoke[^ >]*="[^"]*"' /tmp/wbi-smoke-dom.html || true
+            grep -o '<div class="notice[^"]*" id="notice">[^<]*' /tmp/wbi-smoke-dom.html || true
+            tail -80 /tmp/wbi-http.log || true
+            exit 1
+          fi
+          FEATURES="$(grep -o 'data-smoke-features="[0-9]*"' /tmp/wbi-smoke-dom.html | head -1 | grep -o '[0-9]*')"
+          test "${FEATURES:-0}" -ge 4
+          printf '{\n  "ok": true,\n  "geojson_features": %s,\n  "tested_commit": "%s",\n  "tested_at": "%s"\n}\n' \
+            "$FEATURES" \
+            "$GITHUB_SHA" \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            > site/smoke-test.json
 
       - name: Website in gh-pages veröffentlichen
         uses: peaceiris/actions-gh-pages@v4
@@ -49,4 +99,4 @@ jobs:
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "DWD-WBI-Daten automatisch aktualisiert"
+          commit_message: "Geprüfte DWD-WBI-Website automatisch veröffentlicht"

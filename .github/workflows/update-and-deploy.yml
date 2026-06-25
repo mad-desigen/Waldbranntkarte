@@ -1,89 +1,16 @@
-name: WBI-Karte prüfen und veröffentlichen
+name: WBI-Veröffentlichung pausiert
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "data/**"
   workflow_dispatch:
-  schedule:
-    - cron: "17 */3 * * *"
 
 permissions:
-  contents: write
-
-concurrency:
-  group: wbi-publish
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  publish:
+  paused:
     runs-on: ubuntu-latest
     steps:
-      - name: Repository auschecken
-        uses: actions/checkout@v6
-
-      - name: Python einrichten
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Abhängigkeiten installieren
-        run: python -m pip install --disable-pip-version-check -r requirements.txt
-
-      - name: Bewährte Oberfläche mit neuer Ausrichtung vorbereiten
+      - name: Hinweis
         run: |
-          rm -rf site
-          mkdir -p site/data
-          curl -L --fail --retry 4 \
-            "https://raw.githubusercontent.com/mad-desigen/Waldbranntkarte/347ea3f91b58f5c7ef02836622f2b6f530c2cbb2/index.html" \
-            -o site/index.html
-          cp border-cleanup.js site/alignment-fix.js
-          cp smoke-test.js site/smoke-test.js
-          touch site/.nojekyll
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('site/index.html')
-          text = path.read_text(encoding='utf-8')
-          old = 'init();\n</script></body></html>'
-          new = '/* Start nach Ausrichtungskorrektur. */\n</script><script src="alignment-fix.js"></script><script>init();</script><script src="smoke-test.js"></script></body></html>'
-          if old not in text:
-              raise SystemExit('Startmarke der Kartenoberfläche fehlt.')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
-
-      - name: Aktuelle DWD-Daten abrufen
-        run: python scripts/update_data.py --output site/data
-
-      - name: Alle fünf Tage im Browser prüfen
-        run: |
-          python -m http.server 8000 --directory site >/tmp/wbi-http.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
-          sleep 2
-          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser)"
-          "$CHROME" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
-            --virtual-time-budget=120000 --dump-dom \
-            "http://127.0.0.1:8000/?smoketest=1" > /tmp/wbi-dom.html
-          if ! grep -q 'data-smoke="ok"' /tmp/wbi-dom.html; then
-            grep -o 'data-smoke[^ >]*="[^"]*"' /tmp/wbi-dom.html || true
-            tail -80 /tmp/wbi-http.log || true
-            exit 1
-          fi
-          FEATURES="$(grep -o 'data-smoke-features="[0-9]*"' /tmp/wbi-dom.html | head -1 | grep -o '[0-9]*')"
-          DAYS="$(grep -o 'data-smoke-days="[0-9]*"' /tmp/wbi-dom.html | head -1 | grep -o '[0-9]*')"
-          test "${FEATURES:-0}" -ge 4
-          test "${DAYS:-0}" -eq 5
-          printf '{\n  "ok": true,\n  "source_ui_commit": "347ea3f91b58f5c7ef02836622f2b6f530c2cbb2",\n  "tested_main_commit": "%s",\n  "tested_days": %s,\n  "minimum_geojson_features": %s,\n  "tested_at": "%s"\n}\n' \
-            "$GITHUB_SHA" "$DAYS" "$FEATURES" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            > site/smoke-test.json
-
-      - name: Nur geprüfte Version veröffentlichen
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./site
-          publish_branch: gh-pages
-          force_orphan: true
-          commit_message: "Geprüfte WBI-Ausrichtung und Konturfilter veröffentlicht"
+          echo "Die automatische Veröffentlichung ist vorübergehend deaktiviert."
+          echo "Der Branch gh-pages bleibt auf dem zuletzt funktionierenden Stand, bis die neue Ausrichtungs- und Konturfilterung separat geprüft wurde."

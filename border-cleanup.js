@@ -1,220 +1,142 @@
-/*
- * Entfernt schmale Bundesland-Grenzlinien aus der ausgelesenen DWD-PNG,
- * bevor die Karte an die Deutschland-Geometrie angepasst und vektorisiert wird.
- *
- * Strategie:
- * 1. WBI-Farben klassifizieren.
- * 2. Dünne, linienförmige Stufe-5-Artefakte über lokale Mehrheiten entfernen.
- * 3. Opaque, aber nicht klassifizierte Grenzpixel aus den umgebenden WBI-Flächen auffüllen.
- * 4. Beim späteren Sampling nur noch sehr kleine Suchradien zulassen.
- */
+/* Sichere Ausrichtung nach der gelieferten Referenz. Die Deutschlandmaske bleibt unverändert. */
+(function () {
+  const STRICT_DISTANCE = 80;
 
-function wbiIntegral(labels, width, height, level) {
-  const stride = width + 1;
-  const integral = new Uint32Array(stride * (height + 1));
-  for (let y = 0; y < height; y++) {
-    let row = 0;
-    const src = y * width;
-    const dst = (y + 1) * stride;
-    const prev = y * stride;
-    for (let x = 0; x < width; x++) {
-      if (labels[src + x] === level) row++;
-      integral[dst + x + 1] = integral[prev + x + 1] + row;
-    }
-  }
-  return integral;
-}
-
-function wbiRectSum(integral, stride, x0, y0, x1, y1) {
-  x0 = Math.max(0, x0);
-  y0 = Math.max(0, y0);
-  x1 = Math.min(stride - 2, x1);
-  y1 = Math.min(Math.floor(integral.length / stride) - 2, y1);
-  if (x1 < x0 || y1 < y0) return 0;
-  const a = y0 * stride + x0;
-  const b = y0 * stride + x1 + 1;
-  const c = (y1 + 1) * stride + x0;
-  const d = (y1 + 1) * stride + x1 + 1;
-  return integral[d] - integral[b] - integral[c] + integral[a];
-}
-
-function wbiBuildIntegrals(labels, width, height) {
-  return [null, 1, 2, 3, 4, 5].map(level => level ? wbiIntegral(labels, width, height, level) : null);
-}
-
-function wbiRemoveThinLevel5(labels, quality, width, height, rounds = 3) {
-  const stride = width + 1;
-  let current = labels;
-  for (let round = 0; round < rounds; round++) {
-    const integrals = wbiBuildIntegrals(current, width, height);
-    const next = current.slice();
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const i = y * width + x;
-        if (current[i] !== 5) continue;
-        const c5 = wbiRectSum(integrals[5], stride, x - 4, y - 4, x + 4, y + 4);
-        let majorityLevel = 1;
-        let majorityCount = 0;
-        for (let level = 1; level <= 4; level++) {
-          const count = wbiRectSum(integrals[level], stride, x - 4, y - 4, x + 4, y + 4);
-          if (count > majorityCount) {
-            majorityCount = count;
-            majorityLevel = level;
-          }
-        }
-        const weakLine = c5 <= 28 && majorityCount >= 18;
-        const antialiasLine = quality[i] > 300 && c5 <= 40 && majorityCount >= 16;
-        if (weakLine || antialiasLine) next[i] = majorityLevel;
+  function readLevelFromImage(imageData, x, y, radii) {
+    const { width, height, data } = imageData;
+    const cx = Math.round(x);
+    const cy = Math.round(y);
+    const read = (px, py) => {
+      if (px < 0 || py < 0 || px >= width || py >= height) return 0;
+      const i = (py * width + px) * 4;
+      if (data[i + 3] < 90) return 0;
+      const match = nearest(data[i], data[i + 1], data[i + 2]);
+      return match.dist <= STRICT_DISTANCE ? match.level : 0;
+    };
+    for (const radius of radii) {
+      if (radius === 0) {
+        const direct = read(cx, cy);
+        if (direct) return direct;
+        continue;
       }
-    }
-    current = next;
-  }
-  return current;
-}
-
-function wbiRemoveIsolatedPixels(labels, width, height) {
-  const stride = width + 1;
-  const integrals = wbiBuildIntegrals(labels, width, height);
-  const next = labels.slice();
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = y * width + x;
-      const currentLevel = labels[i];
-      if (!currentLevel) continue;
-      const own = wbiRectSum(integrals[currentLevel], stride, x - 2, y - 2, x + 2, y + 2);
-      let majorityLevel = currentLevel;
-      let majorityCount = own;
-      for (let level = 1; level <= 5; level++) {
-        const count = wbiRectSum(integrals[level], stride, x - 2, y - 2, x + 2, y + 2);
-        if (count > majorityCount) {
-          majorityCount = count;
-          majorityLevel = level;
-        }
+      const votes = [0, 0, 0, 0, 0, 0];
+      for (const [px, py] of [
+        [cx - radius, cy], [cx + radius, cy], [cx, cy - radius], [cx, cy + radius],
+        [cx - radius, cy - radius], [cx + radius, cy - radius],
+        [cx - radius, cy + radius], [cx + radius, cy + radius]
+      ]) {
+        const level = read(px, py);
+        if (level) votes[level]++;
       }
-      if (majorityLevel !== currentLevel && own <= 3 && majorityCount >= 10) {
-        next[i] = majorityLevel;
-      }
+      let best = 0;
+      for (let level = 1; level <= 5; level++) if (votes[level] > votes[best]) best = level;
+      if (best) return best;
     }
+    return 0;
   }
-  return next;
-}
 
-function wbiFillOpaqueGaps(labels, inside, width, height, rounds = 8) {
-  const stride = width + 1;
-  let current = labels;
-  for (let round = 0; round < rounds; round++) {
-    const integrals = wbiBuildIntegrals(current, width, height);
-    const next = current.slice();
-    let changed = 0;
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const i = y * width + x;
-        if (!inside[i] || current[i]) continue;
-        let majorityLevel = 0;
-        let majorityCount = 0;
-        let total = 0;
-        for (let level = 1; level <= 5; level++) {
-          const count = wbiRectSum(integrals[level], stride, x - 2, y - 2, x + 2, y + 2);
-          total += count;
-          if (count > majorityCount) {
-            majorityCount = count;
-            majorityLevel = level;
-          }
-        }
-        if (majorityLevel && total >= 2 && majorityCount >= Math.max(2, Math.ceil(total * 0.38))) {
-          next[i] = majorityLevel;
-          changed++;
+  sourceCanvas = function (img) {
+    const original = document.createElement('canvas');
+    original.width = img.naturalWidth;
+    original.height = img.naturalHeight;
+    const originalContext = original.getContext('2d', { willReadFrequently: true });
+    originalContext.drawImage(img, 0, 0);
+    const raw = originalContext.getImageData(0, 0, original.width, original.height);
+
+    let left = original.width, top = original.height, right = -1, bottom = -1;
+    const scanBottom = Math.floor(original.height * 0.9);
+    for (let y = 0; y < scanBottom; y++) {
+      for (let x = 0; x < original.width; x++) {
+        const i = (y * original.width + x) * 4;
+        const match = nearest(raw.data[i], raw.data[i + 1], raw.data[i + 2]);
+        if (match.dist <= STRICT_DISTANCE) {
+          left = Math.min(left, x); right = Math.max(right, x);
+          top = Math.min(top, y); bottom = Math.max(bottom, y);
         }
       }
     }
-    current = next;
-    if (!changed) break;
-  }
-  return current;
-}
+    if (right < left || bottom < top) throw new Error('In der DWD-Grafik wurden keine WBI-Farben erkannt.');
 
-function prepareSource(img) {
-  const original = document.createElement('canvas');
-  original.width = img.naturalWidth;
-  original.height = img.naturalHeight;
-  const originalContext = original.getContext('2d', { willReadFrequently: true });
-  originalContext.drawImage(img, 0, 0);
-  const originalData = originalContext.getImageData(0, 0, original.width, original.height);
-  const box = largestColorComponent(originalData);
+    const padding = 2;
+    left = Math.max(0, left - padding); top = Math.max(0, top - padding);
+    right = Math.min(original.width - 1, right + padding); bottom = Math.min(original.height - 1, bottom + padding);
+    const cropWidth = right - left + 1, cropHeight = bottom - top + 1;
 
-  const out = document.createElement('canvas');
-  out.width = 900;
-  out.height = Math.round(900 * box.h / box.w);
-  const context = out.getContext('2d', { willReadFrequently: true });
-  context.imageSmoothingEnabled = false;
-  context.drawImage(original, box.x, box.y, box.w, box.h, 0, 0, out.width, out.height);
+    const out = document.createElement('canvas');
+    out.width = 900;
+    out.height = Math.max(1, Math.round(out.width * cropHeight / cropWidth));
+    const context = out.getContext('2d', { willReadFrequently: true });
+    context.imageSmoothingEnabled = false;
+    context.drawImage(original, left, top, cropWidth, cropHeight, 0, 0, out.width, out.height);
 
-  const image = context.getImageData(0, 0, out.width, out.height);
-  const pixelCount = out.width * out.height;
-  const labels = new Uint8Array(pixelCount);
-  const inside = new Uint8Array(pixelCount);
-  const quality = new Uint16Array(pixelCount);
-
-  for (let p = 0; p < pixelCount; p++) {
-    const i = p * 4;
-    inside[p] = image.data[i + 3] > 18 ? 1 : 0;
-    if (!inside[p]) continue;
-    const match = nearest(image.data[i], image.data[i + 1], image.data[i + 2]);
-    quality[p] = Math.min(65535, Math.round(match.dist));
-    if (match.dist < 1600) labels[p] = match.level;
-  }
-
-  let cleaned = wbiRemoveThinLevel5(labels, quality, out.width, out.height, 3);
-  cleaned = wbiRemoveIsolatedPixels(cleaned, out.width, out.height);
-  cleaned = wbiFillOpaqueGaps(cleaned, inside, out.width, out.height, 9);
-  cleaned = wbiRemoveThinLevel5(cleaned, quality, out.width, out.height, 2);
-  cleaned = wbiRemoveIsolatedPixels(cleaned, out.width, out.height);
-
-  for (let p = 0; p < pixelCount; p++) {
-    const i = p * 4;
-    const level = cleaned[p];
-    if (!level) {
-      image.data[i + 3] = 0;
-      continue;
+    const image = context.getImageData(0, 0, out.width, out.height);
+    for (let p = 0; p < out.width * out.height; p++) {
+      const i = p * 4;
+      const match = nearest(image.data[i], image.data[i + 1], image.data[i + 2]);
+      if (match.dist <= STRICT_DISTANCE) {
+        const color = LV[match.level].r;
+        image.data[i] = color[0]; image.data[i + 1] = color[1]; image.data[i + 2] = color[2]; image.data[i + 3] = 255;
+      } else image.data[i + 3] = 0;
     }
-    const color = LEVELS[level].rgb;
-    image.data[i] = color[0];
-    image.data[i + 1] = color[1];
-    image.data[i + 2] = color[2];
-    image.data[i + 3] = 255;
-  }
-
-  context.putImageData(image, 0, 0);
-  return out;
-}
-
-function sampleSource(imageData, x, y) {
-  const cx = Math.round(x);
-  const cy = Math.round(y);
-  const { width, height, data } = imageData;
-  const read = (px, py) => {
-    if (px < 0 || py < 0 || px >= width || py >= height) return 0;
-    const i = (py * width + px) * 4;
-    if (data[i + 3] < 90) return 0;
-    return nearest(data[i], data[i + 1], data[i + 2]).level;
+    context.putImageData(image, 0, 0);
+    return { canvas: out, im: image, box: { l: 0, t: 0, r: out.width - 1, b: out.height - 1, w: out.width, h: out.height } };
   };
 
-  const direct = read(cx, cy);
-  if (direct) return direct;
+  fit = function (img) {
+    const src = sourceCanvas(img);
+    const bbox = turf.bbox(S.mask);
+    const [west, south, east, north] = bbox;
+    const northY = my(north), southY = my(south);
+    const height = 1100;
+    const width = Math.max(320, Math.round(height * ((east - west) * Math.PI / 180) / (northY - southY)));
 
-  for (const radius of [1, 2, 3, 4]) {
-    const votes = {};
-    const points = [
-      [cx - radius, cy], [cx + radius, cy], [cx, cy - radius], [cx, cy + radius],
-      [cx - radius, cy - radius], [cx + radius, cy - radius],
-      [cx - radius, cy + radius], [cx + radius, cy + radius]
-    ];
-    for (const [px, py] of points) {
-      const level = read(px, py);
-      if (level) votes[level] = (votes[level] || 0) + 1;
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = width; maskCanvas.height = height;
+    const maskContext = maskCanvas.getContext('2d', { willReadFrequently: true });
+    drawGeom(maskContext, S.mask.geometry, width, height, bbox);
+    maskContext.fillStyle = '#fff'; maskContext.fill('evenodd');
+    const mask = maskContext.getImageData(0, 0, width, height);
+    const sourceBox = alphaBox(src.im), targetBox = alphaBox(mask);
+    if (!sourceBox || !targetBox) throw new Error('Eine benötigte Kartenmaske ist leer.');
+
+    const labels = new Uint8Array(width * height);
+    const queue = new Int32Array(width * height);
+    let head = 0, tail = 0;
+
+    for (let y = targetBox.t; y <= targetBox.b; y++) {
+      const v = targetBox.h > 1 ? (y - targetBox.t) / (targetBox.h - 1) : 0;
+      const sy = sourceBox.t + v * (sourceBox.h - 1);
+      for (let x = targetBox.l; x <= targetBox.r; x++) {
+        const index = y * width + x;
+        if (mask.data[index * 4 + 3] === 0) continue;
+        const u = targetBox.w > 1 ? (x - targetBox.l) / (targetBox.w - 1) : 0;
+        const sx = sourceBox.l + u * (sourceBox.w - 1);
+        const level = readLevelFromImage(src.im, sx, sy, [0, 1, 2, 4, 7]);
+        if (level) { labels[index] = level; queue[tail++] = index; }
+      }
     }
-    const winner = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
-    if (winner) return Number(winner[0]);
-  }
-  return null;
-}
+    if (!tail) throw new Error('Die DWD-Farbflächen konnten nicht auf die Deutschlandmaske übertragen werden.');
+
+    while (head < tail) {
+      const index = queue[head++], level = labels[index], x = index % width, y = (index / width) | 0;
+      if (x > 0) { const n = index - 1; if (!labels[n] && mask.data[n * 4 + 3]) { labels[n] = level; queue[tail++] = n; } }
+      if (x + 1 < width) { const n = index + 1; if (!labels[n] && mask.data[n * 4 + 3]) { labels[n] = level; queue[tail++] = n; } }
+      if (y > 0) { const n = index - width; if (!labels[n] && mask.data[n * 4 + 3]) { labels[n] = level; queue[tail++] = n; } }
+      if (y + 1 < height) { const n = index + width; if (!labels[n] && mask.data[n * 4 + 3]) { labels[n] = level; queue[tail++] = n; } }
+    }
+
+    const out = document.createElement('canvas');
+    out.width = width; out.height = height;
+    const outContext = out.getContext('2d', { willReadFrequently: true });
+    const output = outContext.createImageData(width, height);
+    let filled = 0;
+    for (let i = 0; i < labels.length; i++) {
+      const level = labels[i];
+      if (!level || mask.data[i * 4 + 3] === 0) continue;
+      const color = LV[level].r, p = i * 4;
+      output.data[p] = color[0]; output.data[p + 1] = color[1]; output.data[p + 2] = color[2]; output.data[p + 3] = 255; filled++;
+    }
+    outContext.putImageData(output, 0, 0);
+    return { canvas: out, data: output, bbox, info: { method: 'Unabhängige X/Y-Skalierung nach Referenz; Konturlücken mit nächster echter WBI-Farbe geschlossen', filled_pixels: filled, width, height } };
+  };
+})();

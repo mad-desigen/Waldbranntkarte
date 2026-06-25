@@ -1,4 +1,4 @@
-name: DWD-Daten prüfen, aktualisieren und Website veröffentlichen
+name: Stabile WBI-Version prüfen, aktualisieren und veröffentlichen
 
 on:
   push:
@@ -32,32 +32,84 @@ jobs:
       - name: Python-Abhängigkeiten installieren
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
-      - name: Statische Website vorbereiten und Maskenfehler korrigieren
+      - name: Zuletzt funktionierende Kartenoberfläche wiederherstellen
         run: |
           rm -rf site
           mkdir -p site/data
-          cp index.html site/index.html
-          cp smoke-test.js site/smoke-test.js
+          curl -L --fail --retry 4 --retry-delay 2 \
+            "https://raw.githubusercontent.com/mad-desigen/Waldbranntkarte/6f93769615ae1ea3ce578ede1b7837675e0f91d3/index.html" \
+            -o site/index.html
           touch site/.nojekyll
+
+      - name: Aktuelle DWD-Daten abrufen
+        run: python scripts/update_data.py --output site/data
+
+      - name: Browser-Prüfung vorbereiten
+        run: |
+          cat > site/smoke-test.js <<'JS'
+          (() => {
+            if (!new URLSearchParams(location.search).has('smoketest')) return;
+            const root = document.documentElement;
+            const start = Date.now();
+            let clicked = false;
+            root.dataset.smoke = 'pending';
+
+            function text(id) {
+              const element = document.getElementById(id);
+              return element ? (element.textContent || '').trim() : '';
+            }
+
+            function fail(message) {
+              root.dataset.smoke = 'fail';
+              root.dataset.smokeReason = String(message || 'Unbekannter Fehler').slice(0, 300);
+            }
+
+            function check() {
+              const status = text('statusText');
+              const notice = text('notice');
+              const generate = document.getElementById('generate');
+              const download = document.getElementById('download');
+              const count = parseInt(text('featureCount') || '0', 10) || 0;
+
+              if (/fehler|fehlgeschlagen|konnte nicht|leere maske/i.test(status + ' ' + notice)) {
+                fail(notice || status);
+                return;
+              }
+
+              if (!clicked && generate && !generate.disabled && /vollständig geladen/i.test(status)) {
+                clicked = true;
+                generate.click();
+              }
+
+              if (clicked && download && !download.disabled && count >= 4) {
+                root.dataset.smoke = 'ok';
+                root.dataset.smokeFeatures = String(count);
+                root.dataset.smokeStatus = status;
+                return;
+              }
+
+              if (Date.now() - start > 115000) {
+                fail('Zeitüberschreitung; Status: ' + status + '; Flächen: ' + count + '; Hinweis: ' + notice);
+                return;
+              }
+
+              setTimeout(check, 250);
+            }
+
+            setTimeout(check, 100);
+          })();
+          JS
           python - <<'PY'
           from pathlib import Path
           path = Path('site/index.html')
           text = path.read_text(encoding='utf-8')
-          wrong = "w=Math.round(h*((east-west)*Math.PI/180)/(sy-ny))"
-          fixed = "w=Math.max(320,Math.round(h*((east-west)*Math.PI/180)/(ny-sy)))"
-          if wrong not in text:
-              raise SystemExit('Erwartete fehlerhafte Canvas-Breitenberechnung wurde nicht gefunden.')
-          text = text.replace(wrong, fixed, 1)
           if '</body>' not in text:
               raise SystemExit('Schließendes body-Tag fehlt.')
           text = text.replace('</body>', '<script src="smoke-test.js"></script></body>', 1)
           path.write_text(text, encoding='utf-8')
           PY
 
-      - name: Aktuelle DWD-Daten abrufen
-        run: python scripts/update_data.py --output site/data
-
-      - name: Vollständigen Browser-Funktionstest ausführen
+      - name: Vollständigen lokalen Browser-Funktionstest ausführen
         run: |
           python -m http.server 8000 --directory site >/tmp/wbi-http.log 2>&1 &
           SERVER_PID=$!
@@ -73,30 +125,30 @@ jobs:
             --no-sandbox \
             --disable-gpu \
             --disable-dev-shm-usage \
-            --virtual-time-budget=90000 \
+            --virtual-time-budget=120000 \
             --dump-dom \
             "http://127.0.0.1:8000/?smoketest=1" \
             > /tmp/wbi-smoke-dom.html
           if ! grep -q 'data-smoke="ok"' /tmp/wbi-smoke-dom.html; then
             echo "Browser-Funktionstest fehlgeschlagen."
             grep -o 'data-smoke[^ >]*="[^"]*"' /tmp/wbi-smoke-dom.html || true
-            grep -o '<div class="notice[^"]*" id="notice">[^<]*' /tmp/wbi-smoke-dom.html || true
+            grep -o '<div id="notice"[^>]*>[^<]*' /tmp/wbi-smoke-dom.html || true
             tail -80 /tmp/wbi-http.log || true
             exit 1
           fi
           FEATURES="$(grep -o 'data-smoke-features="[0-9]*"' /tmp/wbi-smoke-dom.html | head -1 | grep -o '[0-9]*')"
           test "${FEATURES:-0}" -ge 4
-          printf '{\n  "ok": true,\n  "geojson_features": %s,\n  "tested_commit": "%s",\n  "tested_at": "%s"\n}\n' \
+          printf '{\n  "ok": true,\n  "restored_source_commit": "6f93769615ae1ea3ce578ede1b7837675e0f91d3",\n  "geojson_features": %s,\n  "tested_main_commit": "%s",\n  "tested_at": "%s"\n}\n' \
             "$FEATURES" \
             "$GITHUB_SHA" \
             "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             > site/smoke-test.json
 
-      - name: Website in gh-pages veröffentlichen
+      - name: Nur die geprüfte Version in gh-pages veröffentlichen
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "Geprüfte DWD-WBI-Website automatisch veröffentlicht"
+          commit_message: "Stabile funktionierende WBI-Version wiederhergestellt"

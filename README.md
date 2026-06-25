@@ -1,24 +1,18 @@
 # Waldbrandgefahrenindex Deutschland
 
-PHP-Webanwendung zur Darstellung der DWD-Waldbrandgefahrenindex-Grafik und zum Export abgeleiteter Flächen als GeoJSON.
+Statische GitHub-Pages-Anwendung zur Darstellung der DWD-Waldbrandgefahrenindex-Grafik und zum Export abgeleiteter Flächen als GeoJSON.
 
 ## Funktionen
 
 - DWD-Grafik für heute und bis zu vier Folgetage
-- Heatmap auf einer interaktiven Karte
-- lokale PNG-Datei als alternative Datenquelle
+- passgenaue Darstellung auf der Deutschlandgeometrie
 - GeoJSON-Export in WGS 84 / EPSG:4326
 - drei wählbare Rasterauflösungen
+- automatische Aktualisierung über GitHub Actions
 
-## Installation
+## Veröffentlichung
 
-`index.php` auf einen Webspace mit PHP hochladen und dort über den Browser öffnen.
-
-Der Server benötigt entweder PHP-cURL oder aktiviertes `allow_url_fopen`.
-
-## Hinweis zu GitHub Pages
-
-GitHub Pages führt kein PHP aus. Das Repository dient daher zur Versionsverwaltung. Für den Betrieb ist ein PHP-fähiger Webspace erforderlich.
+Die Anwendung wird aus dem Branch `gh-pages` veröffentlicht. Vor jeder automatischen Veröffentlichung wird die Kartenansicht im Browser geladen und die GeoJSON-Erzeugung geprüft.
 
 ## Datenhinweis
 

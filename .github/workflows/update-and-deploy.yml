@@ -41,6 +41,18 @@ jobs:
             -o site/index.html
           touch site/.nojekyll
 
+      - name: Deckende Kartendarstellung einstellen
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('site/index.html')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('value="86"', 'value="100"', 1)
+          text = text.replace('86 %', '100 %', 1)
+          text = text.replace('fillOpacity:.64', 'fillOpacity:1')
+          path.write_text(text, encoding='utf-8')
+          PY
+
       - name: Aktuelle DWD-Daten abrufen
         run: python scripts/update_data.py --output site/data
 
@@ -65,11 +77,11 @@ jobs:
             }
 
             function check() {
-              const status = text('statusText');
+              const status = text('status');
               const notice = text('notice');
               const generate = document.getElementById('generate');
               const download = document.getElementById('download');
-              const count = parseInt(text('featureCount') || '0', 10) || 0;
+              const count = parseInt(text('count') || '0', 10) || 0;
 
               if (/fehler|fehlgeschlagen|konnte nicht|leere maske/i.test(status + ' ' + notice)) {
                 fail(notice || status);
@@ -151,4 +163,4 @@ jobs:
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "Stabile funktionierende WBI-Version wiederhergestellt"
+          commit_message: "Stabile funktionierende WBI-Version mit 100 Prozent Deckkraft wiederhergestellt"

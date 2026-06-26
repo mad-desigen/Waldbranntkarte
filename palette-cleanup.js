@@ -18,7 +18,7 @@
   const ready=new Promise((resolve,reject)=>{
     const deadline=Date.now()+10000;
     const check=()=>{
-      if (window.WBIOriginal?.fillExactPaletteGaps) return resolve();
+      if (window.WBIOriginal?.exactPaletteReady) return resolve();
       if (Date.now()>deadline) return reject(new Error('Die exakte WBI-Farberkennung konnte nicht initialisiert werden.'));
       window.setTimeout(check,10);
     };

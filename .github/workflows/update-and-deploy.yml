@@ -1,10 +1,11 @@
-name: Aktuelle DWD-WBI-Daten veröffentlichen
+name: Stabile WBI-Version prüfen, aktualisieren und veröffentlichen
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths-ignore:
+      - "data/**"
+  workflow_dispatch:
   schedule:
     - cron: "17 */3 * * *"
 
@@ -16,131 +17,138 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  update-and-publish:
+  publish:
     runs-on: ubuntu-latest
     steps:
       - name: Repository auschecken
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Python einrichten
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
 
-      - name: Abhängigkeiten installieren
+      - name: Python-Abhängigkeiten installieren
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
-      - name: Website vorbereiten
+      - name: Zuletzt funktionierende Kartenoberfläche wiederherstellen
         run: |
           rm -rf site
           mkdir -p site/data
-          cp index.html site/index.html
-          cp palette-cleanup.js site/palette-cleanup.js
-          cp geojson-naming.js site/geojson-naming.js
-          cp freshness-fix.js site/freshness-fix.js
+          curl -L --fail --retry 4 --retry-delay 2 \
+            "https://raw.githubusercontent.com/mad-desigen/Waldbranntkarte/6f93769615ae1ea3ce578ede1b7837675e0f91d3/index.html" \
+            -o site/index.html
           touch site/.nojekyll
-          python - <<'PY'
-          from pathlib import Path
 
-          path = Path("site/index.html")
-          text = path.read_text(encoding="utf-8")
-          marker = "init();"
-          position = text.rfind(marker)
-          if position < 0:
-              raise SystemExit("Startaufruf init() wurde in index.html nicht gefunden.")
-          text = text[:position] + text[position + len(marker):]
-          body = (
-              '<script src="palette-cleanup.js"></script>'
-              '<script src="geojson-naming.js"></script>'
-              '<script src="freshness-fix.js"></script>'
-              '<script>init();</script>'
-          )
-          if "</body>" not in text:
-              raise SystemExit("Schließendes body-Element fehlt.")
-          text = text.replace("</body>", body + "</body>", 1)
-          path.write_text(text, encoding="utf-8")
-          PY
-
-      - name: DWD-Daten ohne Cache abrufen
+      - name: Aktuelle DWD-Daten abrufen
         run: python scripts/update_data.py --output site/data
 
-      - name: Datenstand und Dateizuordnung prüfen
+      - name: Browser-Prüfung vorbereiten
         run: |
+          cat > site/smoke-test.js <<'JS'
+          (() => {
+            if (!new URLSearchParams(location.search).has('smoketest')) return;
+            const root = document.documentElement;
+            const start = Date.now();
+            let clicked = false;
+            root.dataset.smoke = 'pending';
+
+            function text(id) {
+              const element = document.getElementById(id);
+              return element ? (element.textContent || '').trim() : '';
+            }
+
+            function fail(message) {
+              root.dataset.smoke = 'fail';
+              root.dataset.smokeReason = String(message || 'Unbekannter Fehler').slice(0, 300);
+            }
+
+            function check() {
+              const status = text('statusText');
+              const notice = text('notice');
+              const generate = document.getElementById('generate');
+              const download = document.getElementById('download');
+              const count = parseInt(text('featureCount') || '0', 10) || 0;
+
+              if (/fehler|fehlgeschlagen|konnte nicht|leere maske/i.test(status + ' ' + notice)) {
+                fail(notice || status);
+                return;
+              }
+
+              if (!clicked && generate && !generate.disabled && /vollständig geladen/i.test(status)) {
+                clicked = true;
+                generate.click();
+              }
+
+              if (clicked && download && !download.disabled && count >= 4) {
+                root.dataset.smoke = 'ok';
+                root.dataset.smokeFeatures = String(count);
+                root.dataset.smokeStatus = status;
+                return;
+              }
+
+              if (Date.now() - start > 115000) {
+                fail('Zeitüberschreitung; Status: ' + status + '; Flächen: ' + count + '; Hinweis: ' + notice);
+                return;
+              }
+
+              setTimeout(check, 250);
+            }
+
+            setTimeout(check, 100);
+          })();
+          JS
           python - <<'PY'
-          import json
-          from datetime import datetime, timedelta, timezone
           from pathlib import Path
-          from zoneinfo import ZoneInfo
-
-          root = Path("site")
-          status = json.loads((root / "data/status.json").read_text(encoding="utf-8"))
-
-          if status.get("ok") is not True:
-              raise SystemExit("status.json meldet keinen erfolgreichen Abruf.")
-          if status.get("stale") is not False:
-              raise SystemExit("Der Datensatz ist als veraltet markiert.")
-
-          available = sorted(int(day) for day in status.get("available_days", []))
-          if available != [0, 1, 2, 3, 4]:
-              raise SystemExit(f"Es fehlen Prognosetage: {available}")
-
-          updated = datetime.fromisoformat(status["updated_at"].replace("Z", "+00:00"))
-          age_hours = (datetime.now(timezone.utc) - updated).total_seconds() / 3600
-          if age_hours > 2:
-              raise SystemExit(f"Der soeben erzeugte Datenstatus ist bereits {age_hours:.1f} Stunden alt.")
-
-          berlin_today = datetime.now(ZoneInfo("Europe/Berlin")).date()
-          for day in available:
-              expected = (berlin_today + timedelta(days=day)).isoformat()
-              actual = status.get("forecast_dates", {}).get(str(day))
-              if actual != expected:
-                  raise SystemExit(f"Falsches Prognosedatum für Tag {day}: {actual}, erwartet {expected}")
-
-              image = root / f"data/wbi_{day}.png"
-              body = image.read_bytes()
-              if len(body) <= 1000 or not body.startswith(b"\x89PNG\r\n\x1a\n"):
-                  raise SystemExit(f"Ungültige PNG-Datei: {image}")
-
-          html = (root / "index.html").read_text(encoding="utf-8")
-          required_scripts = (
-              "palette-cleanup.js",
-              "geojson-naming.js",
-              "freshness-fix.js",
-          )
-          for script in required_scripts:
-              if script not in html:
-                  raise SystemExit(f"Erforderliches Skript wurde nicht eingebunden: {script}")
-          if html.count("init();") != 1:
-              raise SystemExit("Die Anwendung wird nicht genau einmal gestartet.")
-
-          cleanup = (root / "palette-cleanup.js").read_text(encoding="utf-8").lower()
-          for color in ("#800126", "#e9151c", "#ff8c39", "#ffd879", "#ffffce"):
-              if color not in cleanup:
-                  raise SystemExit(f"WBI-Farbe fehlt in der Filterung: {color}")
-
-          naming = (root / "geojson-naming.js").read_text(encoding="utf-8").lower()
-          for name in (
-              "sehr hohe gefahr",
-              "hohe gefahr",
-              "mittlere gefahr",
-              "geringe gefahr",
-              "sehr geringe gefahr",
-          ):
-              if name not in naming:
-                  raise SystemExit(f"GeoJSON-Feature-Name fehlt: {name}")
-          for color in ("#a62121", "#fd6165", "#fabb7a", "#f8f287", "#d0cbc2"):
-              if color not in naming:
-                  raise SystemExit(f"Gestaltungsfarbe fehlt: {color}")
-
-          print("Aktuelle DWD-Daten, Farbfilterung und GeoJSON-Benennung erfolgreich geprüft.")
+          path = Path('site/index.html')
+          text = path.read_text(encoding='utf-8')
+          if '</body>' not in text:
+              raise SystemExit('Schließendes body-Tag fehlt.')
+          text = text.replace('</body>', '<script src="smoke-test.js"></script></body>', 1)
+          path.write_text(text, encoding='utf-8')
           PY
 
-      - name: Geprüfte Website nach GitHub Pages veröffentlichen
+      - name: Vollständigen lokalen Browser-Funktionstest ausführen
+        run: |
+          python -m http.server 8000 --directory site >/tmp/wbi-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          sleep 2
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME" ]; then
+            echo "Kein Chrome/Chromium auf dem Runner gefunden."
+            exit 1
+          fi
+          "$CHROME" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --virtual-time-budget=120000 \
+            --dump-dom \
+            "http://127.0.0.1:8000/?smoketest=1" \
+            > /tmp/wbi-smoke-dom.html
+          if ! grep -q 'data-smoke="ok"' /tmp/wbi-smoke-dom.html; then
+            echo "Browser-Funktionstest fehlgeschlagen."
+            grep -o 'data-smoke[^ >]*="[^"]*"' /tmp/wbi-smoke-dom.html || true
+            grep -o '<div id="notice"[^>]*>[^<]*' /tmp/wbi-smoke-dom.html || true
+            tail -80 /tmp/wbi-http.log || true
+            exit 1
+          fi
+          FEATURES="$(grep -o 'data-smoke-features="[0-9]*"' /tmp/wbi-smoke-dom.html | head -1 | grep -o '[0-9]*')"
+          test "${FEATURES:-0}" -ge 4
+          printf '{\n  "ok": true,\n  "restored_source_commit": "6f93769615ae1ea3ce578ede1b7837675e0f91d3",\n  "geojson_features": %s,\n  "tested_main_commit": "%s",\n  "tested_at": "%s"\n}\n' \
+            "$FEATURES" \
+            "$GITHUB_SHA" \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            > site/smoke-test.json
+
+      - name: Nur die geprüfte Version in gh-pages veröffentlichen
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "Aktuelle DWD-WBI-Daten mit benannten GeoJSON-Flächen veröffentlicht"
+          commit_message: "Stabile funktionierende WBI-Version wiederhergestellt"

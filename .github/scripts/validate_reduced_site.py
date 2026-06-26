@@ -3,7 +3,7 @@ from pathlib import Path
 
 root = Path('site')
 required = (
-    'index.html', 'app.css', 'app.js', 'fix.js',
+    'index.html', 'app.css', 'app.js', 'fix.js', 'palette-cleanup.js',
     'MiMa-Logo.svg', 'AKTUELL-Logo.svg',
     'WBI_GEOlayers_Einfaerben_MiMa-Farben.jsx',
     'WBI_GEOlayers_Einfaerben_Aktuell-Farben.jsx',
@@ -23,7 +23,10 @@ if sorted(int(day) for day in status.get('available_days', [])) != [0, 1, 2, 3, 
     raise SystemExit('Es fehlen DWD-Prognosetage.')
 
 html = (root / 'index.html').read_text(encoding='utf-8')
-for expected in ('MiMa-Farben', 'Aktuell-Farben', 'GEOlayers-Skript', 'value="100"'):
+for expected in (
+    'MiMa-Farben', 'Aktuell-Farben', 'GEOlayers-Skript',
+    'value="100"', 'palette-cleanup.js',
+):
     if expected not in html:
         raise SystemExit(f'Erwarteter Oberflächeninhalt fehlt: {expected}')
 for removed in ('Daten neu laden', 'Vektorisierung', 'DWD-Flächenkarte anzeigen'):
@@ -38,10 +41,19 @@ for color in (
     if color not in app:
         raise SystemExit(f'Farbschema unvollständig: {color}')
 
+cleanup = (root / 'palette-cleanup.js').read_text(encoding='utf-8')
+for marker in (
+    'buildInternalStateBoundaryMask',
+    'sourceCanvas = function sourceCanvasPaletteOnly',
+    'fillGaps = function fillPaletteGaps',
+):
+    if marker not in cleanup:
+        raise SystemExit(f'Ländergrenzen-Bereinigung unvollständig: {marker}')
+
 fix = (root / 'fix.js').read_text(encoding='utf-8')
 if 'fillOpacity: 1' not in fix:
     raise SystemExit('Die Vektorflächen sind nicht vollständig deckend.')
 if 'map.removeLayer(S.raster)' not in fix:
     raise SystemExit('Die Rastermischung wird nicht entfernt.')
 
-print('Reduzierte Oberfläche, Farbschemata, Downloads und DWD-Daten geprüft.')
+print('Reduzierte Oberfläche, Ländergrenzen-Bereinigung, Farbschemata und DWD-Daten geprüft.')

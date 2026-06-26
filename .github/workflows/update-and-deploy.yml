@@ -1,10 +1,9 @@
-name: Stabile WBI-Version prüfen, aktualisieren und veröffentlichen
+name: Reduzierte WBI-Anwendung veröffentlichen
 
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "data/**"
+    paths-ignore: ["data/**"]
   workflow_dispatch:
   schedule:
     - cron: "17 */3 * * *"
@@ -20,147 +19,37 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Repository auschecken
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - name: Python einrichten
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
-      - name: Python-Abhängigkeiten installieren
+      - name: Abhängigkeiten installieren
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
-      - name: Zuletzt funktionierende Kartenoberfläche wiederherstellen
+      - name: Reduzierte Anwendung vorbereiten
         run: |
           rm -rf site
           mkdir -p site/data
-          curl -L --fail --retry 4 --retry-delay 2 \
-            "https://raw.githubusercontent.com/mad-desigen/Waldbranntkarte/6f93769615ae1ea3ce578ede1b7837675e0f91d3/index.html" \
-            -o site/index.html
+          cp index.html app.css app.js fix.js site/
+          cp MiMa-Logo.svg AKTUELL-Logo.svg site/
+          cp WBI_GEOlayers_Einfaerben_MiMa-Farben.jsx site/
+          cp WBI_GEOlayers_Einfaerben_Aktuell-Farben.jsx site/
           touch site/.nojekyll
-
-      - name: Deckende Kartendarstellung einstellen
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('site/index.html')
-          text = path.read_text(encoding='utf-8')
-          text = text.replace('value="86"', 'value="100"', 1)
-          text = text.replace('86 %', '100 %', 1)
-          text = text.replace('fillOpacity:.64', 'fillOpacity:1')
-          path.write_text(text, encoding='utf-8')
-          PY
 
       - name: Aktuelle DWD-Daten abrufen
         run: python scripts/update_data.py --output site/data
 
-      - name: Browser-Prüfung vorbereiten
-        run: |
-          cat > site/smoke-test.js <<'JS'
-          (() => {
-            if (!new URLSearchParams(location.search).has('smoketest')) return;
-            const root = document.documentElement;
-            const start = Date.now();
-            let clicked = false;
-            root.dataset.smoke = 'pending';
+      - name: Oberfläche und Daten prüfen
+        run: python .github/scripts/validate_reduced_site.py
 
-            function text(id) {
-              const element = document.getElementById(id);
-              return element ? (element.textContent || '').trim() : '';
-            }
-
-            function fail(message) {
-              root.dataset.smoke = 'fail';
-              root.dataset.smokeReason = String(message || 'Unbekannter Fehler').slice(0, 300);
-            }
-
-            function check() {
-              const status = text('status');
-              const notice = text('notice');
-              const generate = document.getElementById('generate');
-              const download = document.getElementById('download');
-              const count = parseInt(text('count') || '0', 10) || 0;
-
-              if (/fehler|fehlgeschlagen|konnte nicht|leere maske/i.test(status + ' ' + notice)) {
-                fail(notice || status);
-                return;
-              }
-
-              if (!clicked && generate && !generate.disabled && /vollständig geladen/i.test(status)) {
-                clicked = true;
-                generate.click();
-              }
-
-              if (clicked && download && !download.disabled && count >= 4) {
-                root.dataset.smoke = 'ok';
-                root.dataset.smokeFeatures = String(count);
-                root.dataset.smokeStatus = status;
-                return;
-              }
-
-              if (Date.now() - start > 115000) {
-                fail('Zeitüberschreitung; Status: ' + status + '; Flächen: ' + count + '; Hinweis: ' + notice);
-                return;
-              }
-
-              setTimeout(check, 250);
-            }
-
-            setTimeout(check, 100);
-          })();
-          JS
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('site/index.html')
-          text = path.read_text(encoding='utf-8')
-          if '</body>' not in text:
-              raise SystemExit('Schließendes body-Tag fehlt.')
-          text = text.replace('</body>', '<script src="smoke-test.js"></script></body>', 1)
-          path.write_text(text, encoding='utf-8')
-          PY
-
-      - name: Vollständigen lokalen Browser-Funktionstest ausführen
-        run: |
-          python -m http.server 8000 --directory site >/tmp/wbi-http.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
-          sleep 2
-          CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
-          if [ -z "$CHROME" ]; then
-            echo "Kein Chrome/Chromium auf dem Runner gefunden."
-            exit 1
-          fi
-          "$CHROME" \
-            --headless=new \
-            --no-sandbox \
-            --disable-gpu \
-            --disable-dev-shm-usage \
-            --virtual-time-budget=120000 \
-            --dump-dom \
-            "http://127.0.0.1:8000/?smoketest=1" \
-            > /tmp/wbi-smoke-dom.html
-          if ! grep -q 'data-smoke="ok"' /tmp/wbi-smoke-dom.html; then
-            echo "Browser-Funktionstest fehlgeschlagen."
-            grep -o 'data-smoke[^ >]*="[^"]*"' /tmp/wbi-smoke-dom.html || true
-            grep -o '<div id="notice"[^>]*>[^<]*' /tmp/wbi-smoke-dom.html || true
-            tail -80 /tmp/wbi-http.log || true
-            exit 1
-          fi
-          FEATURES="$(grep -o 'data-smoke-features="[0-9]*"' /tmp/wbi-smoke-dom.html | head -1 | grep -o '[0-9]*')"
-          test "${FEATURES:-0}" -ge 4
-          printf '{\n  "ok": true,\n  "restored_source_commit": "6f93769615ae1ea3ce578ede1b7837675e0f91d3",\n  "geojson_features": %s,\n  "tested_main_commit": "%s",\n  "tested_at": "%s"\n}\n' \
-            "$FEATURES" \
-            "$GITHUB_SHA" \
-            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            > site/smoke-test.json
-
-      - name: Nur die geprüfte Version in gh-pages veröffentlichen
+      - name: Anwendung veröffentlichen
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "Stabile funktionierende WBI-Version mit 100 Prozent Deckkraft wiederhergestellt"
+          commit_message: "Reduzierte WBI-Anwendung mit Farbumschaltung, Skript-Download und 100 Prozent Deckkraft veröffentlicht"

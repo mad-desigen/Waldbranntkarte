@@ -1,4 +1,4 @@
-/* Build-Marker: exactPaletteLevel fillExactPaletteGaps */
+/* Build-Marker: strictDwdPalette */
 (() => {
   'use strict';
 
@@ -9,24 +9,23 @@
     4: ['#e8151c', [232,21,28]],
     5: ['#7e0025', [126,0,37]]
   };
+
   for (const [level,value] of Object.entries(colors)) {
-    LV[level].c=value[0];
-    LV[level].r=value[1].slice();
+    LV[level].c = value[0];
+    LV[level].r = value[1].slice();
   }
 
-  const previousLoadDay=loadDay;
-  const ready=new Promise((resolve,reject)=>{
-    const deadline=Date.now()+10000;
-    const check=()=>{
-      if (window.WBIOriginal?.exactPaletteReady) return resolve();
-      if (Date.now()>deadline) return reject(new Error('Die exakte WBI-Farberkennung konnte nicht initialisiert werden.'));
-      window.setTimeout(check,10);
-    };
-    check();
-  });
-
-  loadDay=async function(force=false) {
-    await ready;
-    return previousLoadDay(force);
+  nearest = function strictDwdPalette(r,g,b) {
+    let level = 0;
+    let dist = Infinity;
+    for (const [number,value] of Object.entries(colors)) {
+      const rgb = value[1];
+      const current = (r-rgb[0])**2 + (g-rgb[1])**2 + (b-rgb[2])**2;
+      if (current <= 8 && current < dist) {
+        level = Number(number);
+        dist = current;
+      }
+    }
+    return {level,dist};
   };
 })();

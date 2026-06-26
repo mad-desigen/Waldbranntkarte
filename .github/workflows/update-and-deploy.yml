@@ -37,6 +37,7 @@ jobs:
           mkdir -p site/data
           cp index.html site/index.html
           cp palette-cleanup.js site/palette-cleanup.js
+          cp geojson-naming.js site/geojson-naming.js
           cp freshness-fix.js site/freshness-fix.js
           touch site/.nojekyll
           python - <<'PY'
@@ -51,6 +52,7 @@ jobs:
           text = text[:position] + text[position + len(marker):]
           body = (
               '<script src="palette-cleanup.js"></script>'
+              '<script src="geojson-naming.js"></script>'
               '<script src="freshness-fix.js"></script>'
               '<script>init();</script>'
           )
@@ -101,10 +103,14 @@ jobs:
                   raise SystemExit(f"Ungültige PNG-Datei: {image}")
 
           html = (root / "index.html").read_text(encoding="utf-8")
-          if "palette-cleanup.js" not in html:
-              raise SystemExit("Die exakte WBI-Farbfilterung wurde nicht eingebunden.")
-          if "freshness-fix.js" not in html:
-              raise SystemExit("Frische- und Datumsprüfung wurde nicht eingebunden.")
+          required_scripts = (
+              "palette-cleanup.js",
+              "geojson-naming.js",
+              "freshness-fix.js",
+          )
+          for script in required_scripts:
+              if script not in html:
+                  raise SystemExit(f"Erforderliches Skript wurde nicht eingebunden: {script}")
           if html.count("init();") != 1:
               raise SystemExit("Die Anwendung wird nicht genau einmal gestartet.")
 
@@ -113,7 +119,21 @@ jobs:
               if color not in cleanup:
                   raise SystemExit(f"WBI-Farbe fehlt in der Filterung: {color}")
 
-          print("Aktuelle DWD-Daten, Prognosedaten und exakte WBI-Farbfilterung erfolgreich geprüft.")
+          naming = (root / "geojson-naming.js").read_text(encoding="utf-8").lower()
+          for name in (
+              "sehr hohe gefahr",
+              "hohe gefahr",
+              "mittlere gefahr",
+              "geringe gefahr",
+              "sehr geringe gefahr",
+          ):
+              if name not in naming:
+                  raise SystemExit(f"GeoJSON-Feature-Name fehlt: {name}")
+          for color in ("#a62121", "#fd6165", "#fabb7a", "#f8f287", "#d0cbc2"):
+              if color not in naming:
+                  raise SystemExit(f"Gestaltungsfarbe fehlt: {color}")
+
+          print("Aktuelle DWD-Daten, Farbfilterung und GeoJSON-Benennung erfolgreich geprüft.")
           PY
 
       - name: Geprüfte Website nach GitHub Pages veröffentlichen
@@ -123,4 +143,4 @@ jobs:
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "Aktuelle DWD-WBI-Daten mit exakter Farbfilterung veröffentlicht"
+          commit_message: "Aktuelle DWD-WBI-Daten mit benannten GeoJSON-Flächen veröffentlicht"

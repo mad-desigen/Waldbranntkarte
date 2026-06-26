@@ -36,6 +36,7 @@ jobs:
           rm -rf site
           mkdir -p site/data
           cp index.html site/index.html
+          cp palette-cleanup.js site/palette-cleanup.js
           cp freshness-fix.js site/freshness-fix.js
           touch site/.nojekyll
           python - <<'PY'
@@ -48,7 +49,11 @@ jobs:
           if position < 0:
               raise SystemExit("Startaufruf init() wurde in index.html nicht gefunden.")
           text = text[:position] + text[position + len(marker):]
-          body = "<script src=\"freshness-fix.js\"></script><script>init();</script>"
+          body = (
+              '<script src="palette-cleanup.js"></script>'
+              '<script src="freshness-fix.js"></script>'
+              '<script>init();</script>'
+          )
           if "</body>" not in text:
               raise SystemExit("Schließendes body-Element fehlt.")
           text = text.replace("</body>", body + "</body>", 1)
@@ -62,7 +67,7 @@ jobs:
         run: |
           python - <<'PY'
           import json
-          from datetime import date, datetime, timedelta, timezone
+          from datetime import datetime, timedelta, timezone
           from pathlib import Path
           from zoneinfo import ZoneInfo
 
@@ -96,12 +101,19 @@ jobs:
                   raise SystemExit(f"Ungültige PNG-Datei: {image}")
 
           html = (root / "index.html").read_text(encoding="utf-8")
+          if "palette-cleanup.js" not in html:
+              raise SystemExit("Die exakte WBI-Farbfilterung wurde nicht eingebunden.")
           if "freshness-fix.js" not in html:
-              raise SystemExit("Frische- und Datumsprüfung wurde nicht in die Website eingebunden.")
+              raise SystemExit("Frische- und Datumsprüfung wurde nicht eingebunden.")
           if html.count("init();") != 1:
               raise SystemExit("Die Anwendung wird nicht genau einmal gestartet.")
 
-          print("Aktuelle DWD-Daten und Prognosedaten erfolgreich geprüft.")
+          cleanup = (root / "palette-cleanup.js").read_text(encoding="utf-8").lower()
+          for color in ("#800126", "#e9151c", "#ff8c39", "#ffd879", "#ffffce"):
+              if color not in cleanup:
+                  raise SystemExit(f"WBI-Farbe fehlt in der Filterung: {color}")
+
+          print("Aktuelle DWD-Daten, Prognosedaten und exakte WBI-Farbfilterung erfolgreich geprüft.")
           PY
 
       - name: Geprüfte Website nach GitHub Pages veröffentlichen
@@ -111,4 +123,4 @@ jobs:
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "Aktuelle DWD-WBI-Daten automatisch veröffentlicht"
+          commit_message: "Aktuelle DWD-WBI-Daten mit exakter Farbfilterung veröffentlicht"

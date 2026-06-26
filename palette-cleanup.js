@@ -3,11 +3,11 @@
   'use strict';
 
   const colors = {
-    1: ['#ffffce', [255,255,206]],
-    2: ['#ffd879', [255,216,121]],
-    3: ['#ff8c39', [255,140,57]],
-    4: ['#e9151c', [233,21,28]],
-    5: ['#800126', [128,1,38]]
+    1: ['#ffffcc', [255,255,204]],
+    2: ['#ffd979', [255,217,121]],
+    3: ['#ff8c38', [255,140,56]],
+    4: ['#e8151c', [232,21,28]],
+    5: ['#7e0025', [126,0,37]]
   };
   for (const [level,value] of Object.entries(colors)) {
     LV[level].c=value[0];
@@ -15,15 +15,15 @@
   }
 
   const previousLoadDay=loadDay;
-  const base='https://cdn.jsdelivr.net/gh/mad-desigen/Waldbranntkarte@37f5df45867e0085808c5cafd266959376d46b4c/';
-  const modules=['wbi-engine-core.js','wbi-engine-sampling.js','wbi-engine-fit.js'];
-  const ready=modules.reduce((chain,source)=>chain.then(()=>new Promise((resolve,reject)=>{
-    const script=document.createElement('script');
-    script.src=base+source;
-    script.onload=resolve;
-    script.onerror=()=>reject(new Error('Originalmodul konnte nicht geladen werden: '+source));
-    document.head.appendChild(script);
-  })),Promise.resolve());
+  const ready=new Promise((resolve,reject)=>{
+    const deadline=Date.now()+10000;
+    const check=()=>{
+      if (window.WBIOriginal?.fillExactPaletteGaps) return resolve();
+      if (Date.now()>deadline) return reject(new Error('Die exakte WBI-Farberkennung konnte nicht initialisiert werden.'));
+      window.setTimeout(check,10);
+    };
+    check();
+  });
 
   loadDay=async function(force=false) {
     await ready;

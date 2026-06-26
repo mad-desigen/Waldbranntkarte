@@ -1,32 +1,31 @@
-/* Build-Marker: exactPaletteLevel fillExactPaletteGaps */
+/* Build-Marker: strictDwdPalette */
 (() => {
   'use strict';
 
   const colors = {
-    1: ['#ffffce', [255,255,206]],
-    2: ['#ffd879', [255,216,121]],
-    3: ['#ff8c39', [255,140,57]],
-    4: ['#e9151c', [233,21,28]],
-    5: ['#800126', [128,1,38]]
+    1: ['#ffffcc', [255,255,204]],
+    2: ['#ffd979', [255,217,121]],
+    3: ['#ff8c38', [255,140,56]],
+    4: ['#e8151c', [232,21,28]],
+    5: ['#7e0025', [126,0,37]]
   };
+
   for (const [level,value] of Object.entries(colors)) {
-    LV[level].c=value[0];
-    LV[level].r=value[1].slice();
+    LV[level].c = value[0];
+    LV[level].r = value[1].slice();
   }
 
-  const previousLoadDay=loadDay;
-  const base='https://cdn.jsdelivr.net/gh/mad-desigen/Waldbranntkarte@37f5df45867e0085808c5cafd266959376d46b4c/';
-  const modules=['wbi-engine-core.js','wbi-engine-sampling.js','wbi-engine-fit.js'];
-  const ready=modules.reduce((chain,source)=>chain.then(()=>new Promise((resolve,reject)=>{
-    const script=document.createElement('script');
-    script.src=base+source;
-    script.onload=resolve;
-    script.onerror=()=>reject(new Error('Originalmodul konnte nicht geladen werden: '+source));
-    document.head.appendChild(script);
-  })),Promise.resolve());
-
-  loadDay=async function(force=false) {
-    await ready;
-    return previousLoadDay(force);
+  nearest = function strictDwdPalette(r,g,b) {
+    let level = 0;
+    let dist = Infinity;
+    for (const [number,value] of Object.entries(colors)) {
+      const rgb = value[1];
+      const current = (r-rgb[0])**2 + (g-rgb[1])**2 + (b-rgb[2])**2;
+      if (current <= 8 && current < dist) {
+        level = Number(number);
+        dist = current;
+      }
+    }
+    return {level,dist};
   };
 })();

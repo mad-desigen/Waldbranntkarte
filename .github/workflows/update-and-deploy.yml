@@ -33,7 +33,7 @@ jobs:
         run: |
           rm -rf site
           mkdir -p site/data
-          cp index.html app.css app.js fix.js site/
+          cp index.html app.css app.js fix.js palette-cleanup.js site/
           cp MiMa-Logo.svg AKTUELL-Logo.svg site/
           cp WBI_GEOlayers_Einfaerben_MiMa-Farben.jsx site/
           cp WBI_GEOlayers_Einfaerben_Aktuell-Farben.jsx site/
@@ -52,4 +52,4 @@ jobs:
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "Reduzierte WBI-Anwendung mit Farbumschaltung, Skript-Download und 100 Prozent Deckkraft veröffentlicht"
+          commit_message: "Reduzierte WBI-Anwendung mit Ländergrenzen-Bereinigung veröffentlicht"

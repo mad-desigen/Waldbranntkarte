@@ -1,3 +1,4 @@
+/* Build-Marker: exactPaletteLevel fillExactPaletteGaps */
 (() => {
   'use strict';
 
@@ -14,10 +15,11 @@
   }
 
   const previousLoadDay=loadDay;
+  const base='https://cdn.jsdelivr.net/gh/mad-desigen/Waldbranntkarte@main/';
   const modules=['wbi-engine-core.js','wbi-engine-sampling.js','wbi-engine-fit.js'];
   const ready=modules.reduce((chain,source)=>chain.then(()=>new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=source+'?v=original-1';
+    script.src=base+source+'?v=original-1';
     script.onload=resolve;
     script.onerror=()=>reject(new Error('Originalmodul konnte nicht geladen werden: '+source));
     document.head.appendChild(script);

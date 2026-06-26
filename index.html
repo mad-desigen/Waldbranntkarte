@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Waldbrandgefahrenindex Deutschland – GeoJSON</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="app.css?v=4">
+<link rel="stylesheet" href="app.css?v=5">
 </head>
 <body>
 <header>
@@ -15,11 +15,11 @@
 <div class="app">
 <aside class="panel">
   <div hidden aria-hidden="true">
-    <input id="showRaster" type="checkbox" checked>
+    <input id="showRaster" type="checkbox">
     <input id="showVector" type="checkbox" checked>
     <input id="showStates" type="checkbox" checked>
-    <input id="opacity" type="range" min="10" max="100" value="86">
-    <span id="opacityText">86 %</span>
+    <input id="opacity" type="range" min="10" max="100" value="100">
+    <span id="opacityText">100 %</span>
     <select id="res"><option value="200,260" selected>Standard</option></select>
     <button id="generate" type="button"></button>
     <span id="count"></span><span id="size"></span>
@@ -36,7 +36,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-<script src="app.js?v=4"></script>
-<script src="fix.js?v=1"></script>
+<script src="app.js?v=5"></script>
+<script src="fix.js?v=2"></script>
 </body>
 </html>

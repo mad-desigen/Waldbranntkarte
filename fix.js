@@ -5,6 +5,10 @@ renderVector = function () {
         map.removeLayer(S.vector);
     }
 
+    if (S.raster && map.hasLayer(S.raster)) {
+        map.removeLayer(S.raster);
+    }
+
     if (!S.geo) {
         return;
     }

@@ -15,11 +15,11 @@
   }
 
   const previousLoadDay=loadDay;
-  const base='https://cdn.jsdelivr.net/gh/mad-desigen/Waldbranntkarte@main/';
+  const base='https://cdn.jsdelivr.net/gh/mad-desigen/Waldbranntkarte@37f5df45867e0085808c5cafd266959376d46b4c/';
   const modules=['wbi-engine-core.js','wbi-engine-sampling.js','wbi-engine-fit.js'];
   const ready=modules.reduce((chain,source)=>chain.then(()=>new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=base+source+'?v=original-1';
+    script.src=base+source;
     script.onload=resolve;
     script.onerror=()=>reject(new Error('Originalmodul konnte nicht geladen werden: '+source));
     document.head.appendChild(script);

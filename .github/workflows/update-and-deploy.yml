@@ -1,4 +1,4 @@
-name: Reduzierte WBI-Anwendung veröffentlichen
+name: Originale WBI-Funktion mit reduzierter Oberfläche veröffentlichen
 
 on:
   push:
@@ -29,33 +29,45 @@ jobs:
       - name: Abhängigkeiten installieren
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
-      - name: Anwendung vorbereiten
+      - name: Unveränderte ursprüngliche Kartenfunktion vorbereiten
         run: |
           rm -rf site
           mkdir -p site/data
-          cp index.html app.css app.js fix.js palette-cleanup.js site/
+          curl -L --fail --retry 4 --retry-delay 2 \
+            "https://raw.githubusercontent.com/mad-desigen/Waldbranntkarte/6f93769615ae1ea3ce578ede1b7837675e0f91d3/index.html" \
+            -o site/index.html
+          cp ui-custom.js ui-custom.css site/
           cp MiMa-Logo.svg AKTUELL-Logo.svg site/
           cp WBI_GEOlayers_Einfaerben_MiMa-Farben.jsx site/
           cp WBI_GEOlayers_Einfaerben_Aktuell-Farben.jsx site/
-          sed -i 's/palette-cleanup.js?v=6/palette-cleanup.js?v=7/' site/index.html
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('site/index.html')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('</head>', '<link rel="stylesheet" href="ui-custom.css?v=1"></head>', 1)
+          text = text.replace('</body>', '<script src="ui-custom.js?v=1"></script></body>', 1)
+          path.write_text(text, encoding='utf-8')
+          PY
           touch site/.nojekyll
 
       - name: Aktuelle DWD-Daten abrufen
         run: python scripts/update_data.py --output site/data
 
-      - name: Dateien prüfen
+      - name: Grundfunktion und Erweiterungen prüfen
         run: |
-          test -s site/palette-cleanup.js
+          test -s site/index.html
+          test -s site/ui-custom.js
           test -s site/data/status.json
           test -s site/data/states.geojson
           test -s site/data/wbi_0.png
-          grep -q '#800126' site/palette-cleanup.js
-          grep -q '#e9151c' site/palette-cleanup.js
-          grep -q '#ff8c39' site/palette-cleanup.js
-          grep -q '#ffd879' site/palette-cleanup.js
-          grep -q '#ffffce' site/palette-cleanup.js
-          grep -q 'exactPaletteLevel' site/palette-cleanup.js
-          grep -q 'fillExactPaletteGaps' site/palette-cleanup.js
+          grep -q 'function largestColorComponent' site/index.html
+          grep -q 'function prepareSource' site/index.html
+          grep -q 'function fitToGermany' site/index.html
+          grep -q 'function sampleSource' site/index.html
+          grep -q 'ui-custom.js?v=1' site/index.html
+          grep -q 'MiMa-Farben' site/ui-custom.js
+          grep -q 'Aktuell-Farben' site/ui-custom.js
+          grep -q 'fillOpacity: 1' site/ui-custom.js
 
       - name: Anwendung veröffentlichen
         uses: peaceiris/actions-gh-pages@v4
@@ -64,4 +76,4 @@ jobs:
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "Exakte WBI-Farben filtern und Grenzlücken zusammenführen"
+          commit_message: "Unveränderte ursprüngliche WBI-Funktion mit reduzierter Oberfläche veröffentlicht"

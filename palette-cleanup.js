@@ -1,9 +1,12 @@
 /*
   Entfernt DWD-Ländergrenzen aus der WBI-Klassifikation.
-  Prinzip:
-  1. Nur die fünf fest definierten WBI-Farben werden als Gefahrenstufen akzeptiert.
-  2. Schwarze/graue Konturen werden als eigene Klasse 6 markiert und leicht verbreitert.
-  3. Diese Lücken werden nach dem Mapping aus den angrenzenden echten WBI-Flächen geschlossen.
+
+  Zweistufiges Verfahren:
+  1. Im DWD-PNG werden ausschließlich die fünf festgelegten WBI-Farben akzeptiert.
+     Schwarze/graue Konturen werden als eigene Klasse markiert und entfernt.
+  2. Nach dem Mapping wird zusätzlich ein schmaler Korridor entlang der amtlichen
+     Bundeslandgrenzen aus dem GeoJSON entfernt. Die Lücke wächst synchron von
+     beiden Seiten mit den echten WBI-Farben zu.
 */
 (() => {
   'use strict';
@@ -17,8 +20,10 @@
   };
 
   const PALETTE_TOLERANCE = 12;
-  const BORDER_RADIUS = 2;
-  const MAX_FILL_ROUNDS = 20;
+  const SOURCE_BORDER_RADIUS = 2;
+  const TARGET_BORDER_WIDTH = 10;
+  const TARGET_EDGE_MARGIN = 6;
+  const MAX_FILL_ROUNDS = 28;
 
   for (const [level, value] of Object.entries(PALETTE)) {
     LV[level].c = value.hex;
@@ -52,8 +57,8 @@
     const chroma = max - min;
     const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
-    // Schwarz, Grau und die neutralen Antialiasing-Kerne der DWD-Länderlinien.
-    // Echtes WBI-Dunkelrot ist stark gesättigt und fällt daher nicht hier hinein.
+    // Schwarz, Grau und neutrale Antialiasing-Pixel der DWD-Länderlinien.
+    // Echtes WBI-Dunkelrot ist deutlich gesättigt und wird hier nicht erfasst.
     return luminance < 210 && chroma <= 28;
   }
 
@@ -74,6 +79,63 @@
             if (dx * dx + dy * dy > radius * radius) continue;
             result[yy * width + xx] = 1;
           }
+        }
+      }
+    }
+
+    return result;
+  }
+
+  function isInsideWithMargin(inMask, width, height, x, y, radius) {
+    const probes = [
+      [0, 0],
+      [-radius, 0], [radius, 0], [0, -radius], [0, radius],
+      [-radius, -radius], [radius, -radius],
+      [-radius, radius], [radius, radius]
+    ];
+
+    for (const [dx, dy] of probes) {
+      const xx = x + dx;
+      const yy = y + dy;
+      if (xx < 0 || xx >= width || yy < 0 || yy >= height) return false;
+      if (!inMask[yy * width + xx]) return false;
+    }
+
+    return true;
+  }
+
+  function buildInternalStateBoundaryMask(inMask, width, height) {
+    const result = new Uint8Array(width * height);
+    if (!S.states?.features?.length) return result;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    const bbox = turf.bbox(S.states);
+
+    context.clearRect(0, 0, width, height);
+    context.strokeStyle = '#ffffff';
+    context.lineWidth = TARGET_BORDER_WIDTH;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+
+    for (const feature of S.states.features) {
+      const geometry = feature?.geometry;
+      if (!geometry || !/Polygon/.test(geometry.type)) continue;
+      drawGeom(context, geometry, width, height, bbox);
+      context.stroke();
+    }
+
+    const pixels = context.getImageData(0, 0, width, height).data;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const index = y * width + x;
+        if (pixels[index * 4 + 3] === 0) continue;
+
+        // Nur innere Ländergrenzen entfernen. Die deutsche Außenkontur bleibt erhalten.
+        if (isInsideWithMargin(inMask, width, height, x, y, TARGET_EDGE_MARGIN)) {
+          result[index] = 1;
         }
       }
     }
@@ -103,8 +165,7 @@
     let right = -1;
     let bottom = -1;
 
-    // Der Zuschnitt wird ausschließlich aus echten WBI-Farbpixeln bestimmt.
-    // Damit können Überschrift, Legende, Logo und schwarze Linien den Kartenausschnitt nicht vergrößern.
+    // Der Kartenausschnitt wird ausschließlich durch echte WBI-Farbpixel bestimmt.
     for (let y = 0; y < scanHeight; y++) {
       for (let x = 0; x < width; x++) {
         const pixelIndex = (y * width + x) * 4;
@@ -133,7 +194,7 @@
       throw new Error('In der DWD-Grafik wurden keine exakten WBI-Farben erkannt.');
     }
 
-    const expandedBorder = dilate(borderCore, width, height, BORDER_RADIUS);
+    const expandedBorder = dilate(borderCore, width, height, SOURCE_BORDER_RADIUS);
     const cropWidth = right - left + 1;
     const cropHeight = bottom - top + 1;
     const labels = new Uint8Array(cropWidth * cropHeight);
@@ -166,14 +227,15 @@
 
   fillGaps = function fillPaletteGaps(labels, inMask, width, height) {
     let current = labels.slice();
+    const stateBoundaries = buildInternalStateBoundaryMask(inMask, width, height);
 
-    // Konturpixel werden bewusst zu Lücken, damit sie nicht als Stufe 5 fortbestehen können.
+    // Sowohl erkannte DWD-Konturpixel als auch der amtliche Zielkorridor werden zu Lücken.
     for (let i = 0; i < current.length; i++) {
-      if (current[i] === 6) current[i] = 0;
+      if (current[i] === 6 || stateBoundaries[i]) current[i] = 0;
     }
 
-    // Die Lücken werden von den gegenüberliegenden echten WBI-Farben her geschlossen.
-    // Bei unterschiedlichen Farben bleibt die neue Grenze ungefähr in der Mitte der alten Konturlinie.
+    // Synchrones Auffüllen von beiden Seiten. Dadurch endet die neue Farbgrenze
+    // ungefähr in der Mitte der entfernten Konturlinie.
     for (let round = 0; round < MAX_FILL_ROUNDS; round++) {
       const next = current.slice();
       let changed = 0;
@@ -185,13 +247,15 @@
           if (current[index] >= 1 && current[index] <= 5) continue;
 
           const counts = [0, 0, 0, 0, 0, 0];
-          const distanceWeights = [
-            [-1, 0, 3], [1, 0, 3], [0, -1, 3], [0, 1, 3],
-            [-1, -1, 2], [1, -1, 2], [-1, 1, 2], [1, 1, 2],
-            [-2, 0, 1], [2, 0, 1], [0, -2, 1], [0, 2, 1]
+          const neighbors = [
+            [-1, 0, 5], [1, 0, 5], [0, -1, 5], [0, 1, 5],
+            [-1, -1, 3], [1, -1, 3], [-1, 1, 3], [1, 1, 3],
+            [-2, 0, 2], [2, 0, 2], [0, -2, 2], [0, 2, 2],
+            [-2, -1, 1], [2, -1, 1], [-2, 1, 1], [2, 1, 1],
+            [-1, -2, 1], [1, -2, 1], [-1, 2, 1], [1, 2, 1]
           ];
 
-          for (const [dx, dy, weight] of distanceWeights) {
+          for (const [dx, dy, weight] of neighbors) {
             const xx = x + dx;
             const yy = y + dy;
             if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;

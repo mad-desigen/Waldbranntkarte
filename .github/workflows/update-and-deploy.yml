@@ -29,7 +29,7 @@ jobs:
       - name: Abhängigkeiten installieren
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
-      - name: Reduzierte Anwendung vorbereiten
+      - name: Anwendung vorbereiten
         run: |
           rm -rf site
           mkdir -p site/data
@@ -37,13 +37,25 @@ jobs:
           cp MiMa-Logo.svg AKTUELL-Logo.svg site/
           cp WBI_GEOlayers_Einfaerben_MiMa-Farben.jsx site/
           cp WBI_GEOlayers_Einfaerben_Aktuell-Farben.jsx site/
+          sed -i 's/palette-cleanup.js?v=6/palette-cleanup.js?v=7/' site/index.html
           touch site/.nojekyll
 
       - name: Aktuelle DWD-Daten abrufen
         run: python scripts/update_data.py --output site/data
 
-      - name: Oberfläche und Daten prüfen
-        run: python .github/scripts/validate_reduced_site.py
+      - name: Dateien prüfen
+        run: |
+          test -s site/palette-cleanup.js
+          test -s site/data/status.json
+          test -s site/data/states.geojson
+          test -s site/data/wbi_0.png
+          grep -q '#800126' site/palette-cleanup.js
+          grep -q '#e9151c' site/palette-cleanup.js
+          grep -q '#ff8c39' site/palette-cleanup.js
+          grep -q '#ffd879' site/palette-cleanup.js
+          grep -q '#ffffce' site/palette-cleanup.js
+          grep -q 'exactPaletteLevel' site/palette-cleanup.js
+          grep -q 'fillExactPaletteGaps' site/palette-cleanup.js
 
       - name: Anwendung veröffentlichen
         uses: peaceiris/actions-gh-pages@v4
@@ -52,4 +64,4 @@ jobs:
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "Reduzierte WBI-Anwendung mit Ländergrenzen-Bereinigung veröffentlicht"
+          commit_message: "Exakte WBI-Farben filtern und Grenzlücken zusammenführen"

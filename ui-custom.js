@@ -2,18 +2,14 @@
   'use strict';
 
   const palettes = {
-    mima: {
-      name: 'MiMa-Farben',
-      logo: 'MiMa-Logo.svg',
-      alt: 'MiMa',
-      script: 'WBI_GEOlayers_Einfaerben_MiMa-Farben.jsx',
+    ma: {
+      name: 'MA',
+      script: 'WBI_GEOlayers_Einfaerben_MA.jsx',
       colors: {1:'#d0cbc2',2:'#f8f287',3:'#fabb7a',4:'#fd6165',5:'#a62121'}
     },
-    aktuell: {
-      name: 'Aktuell-Farben',
-      logo: 'AKTUELL-Logo.svg',
-      alt: 'Aktuell',
-      script: 'WBI_GEOlayers_Einfaerben_Aktuell-Farben.jsx',
+    akt: {
+      name: 'AKT',
+      script: 'WBI_GEOlayers_Einfaerben_AKT.jsx',
       colors: {1:'#c1bdb2',2:'#fec804',3:'#ff8b00',4:'#c61e1e',5:'#71207f'}
     }
   };
@@ -29,7 +25,7 @@
   vectorSection.hidden = true;
 
   const paletteSection = document.createElement('section');
-  paletteSection.innerHTML = '<label for="paletteChoice">Farbschema</label><select id="paletteChoice"><option value="mima">MiMa-Farben</option><option value="aktuell">Aktuell-Farben</option></select>';
+  paletteSection.innerHTML = '<label for="paletteChoice">Farbschema</label><select id="paletteChoice"><option value="ma">MA</option><option value="akt">AKT</option></select>';
   daySection.insertAdjacentElement('afterend', paletteSection);
 
   const paletteChoice = document.getElementById('paletteChoice');
@@ -46,17 +42,13 @@
   }
 
   const scriptSection = document.createElement('section');
-  scriptSection.innerHTML = '<h2>GEOlayers-Skript</h2><a id="scriptDownload" class="script-download" href="WBI_GEOlayers_Einfaerben_MiMa-Farben.jsx" download>MiMa-Farben herunterladen</a><p class="script-note">After-Effects-Skript zum automatischen Einfärben der importierten GEOlayers-Flächen.</p>';
+  scriptSection.innerHTML = '<h2>GEOlayers-Skript</h2><a id="scriptDownload" class="script-download" href="WBI_GEOlayers_Einfaerben_MA.jsx" download>MA herunterladen</a><p class="script-note">After-Effects-Skript zum automatischen Einfärben der importierten GEOlayers-Flächen.</p>';
   legendSection.insertAdjacentElement('afterend', scriptSection);
 
   const header = document.querySelector('header');
   const oldStatus = header.querySelector('.status');
   const headerRight = document.createElement('div');
   headerRight.className = 'header-right';
-  const brand = document.createElement('div');
-  brand.className = 'brand';
-  brand.innerHTML = '<img id="brandLogo" src="MiMa-Logo.svg" alt="MiMa">';
-  headerRight.appendChild(brand);
   if (oldStatus) headerRight.appendChild(oldStatus);
   header.appendChild(headerRight);
 
@@ -88,10 +80,6 @@
     Object.entries(palette.colors).forEach(([level,color]) => {
       LEVELS[level].color = color;
     });
-
-    const logo = document.getElementById('brandLogo');
-    logo.src = palette.logo + '?v=1';
-    logo.alt = palette.alt;
 
     const scriptLink = document.getElementById('scriptDownload');
     scriptLink.href = palette.script;
@@ -132,7 +120,7 @@
 
   paletteChoice.addEventListener('change', () => applyPalette(paletteChoice.value));
   updateDateLabels();
-  applyPalette('mima');
+  applyPalette('ma');
   visibility();
 
   const autoGenerate = window.setInterval(() => {

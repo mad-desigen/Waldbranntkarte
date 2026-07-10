@@ -37,9 +37,8 @@ jobs:
             "https://raw.githubusercontent.com/mad-desigen/Waldbranntkarte/6f93769615ae1ea3ce578ede1b7837675e0f91d3/index.html" \
             -o site/index.html
           cp legacy-engine-fix.js ui-custom.js ui-custom.css site/
-          cp MiMa-Logo.svg AKTUELL-Logo.svg site/
-          cp WBI_GEOlayers_Einfaerben_MiMa-Farben.jsx site/
-          cp WBI_GEOlayers_Einfaerben_Aktuell-Farben.jsx site/
+          cp WBI_GEOlayers_Einfaerben_MA.jsx site/
+          cp WBI_GEOlayers_Einfaerben_AKT.jsx site/
           python - <<'PY'
           from pathlib import Path
 
@@ -54,13 +53,13 @@ jobs:
 
           text = text.replace(
               '</head>',
-              '<link rel="stylesheet" href="ui-custom.css?v=2"></head>',
+              '<link rel="stylesheet" href="ui-custom.css?v=3"></head>',
               1,
           )
           text = text.replace(
               '</body>',
               '<script src="legacy-engine-fix.js?v=2"></script>'
-              '<script src="ui-custom.js?v=2"></script>'
+              '<script src="ui-custom.js?v=3"></script>'
               '<script>window.__startWBI();</script></body>',
               1,
           )
@@ -71,12 +70,14 @@ jobs:
       - name: Aktuelle DWD-Daten abrufen
         run: python scripts/update_data.py --output site/data
 
-      - name: Kartenfunktion und Farbfilterung prüfen
+      - name: Kartenfunktion, neutrale Oberfläche und Farbfilterung prüfen
         run: |
           test -s site/index.html
           test -s site/legacy-engine-fix.js
           test -s site/ui-custom.js
           test -s site/ui-custom.css
+          test -s site/WBI_GEOlayers_Einfaerben_MA.jsx
+          test -s site/WBI_GEOlayers_Einfaerben_AKT.jsx
           test -s site/data/status.json
           test -s site/data/states.geojson
           test -s site/data/wbi_0.png
@@ -87,10 +88,13 @@ jobs:
           grep -q 'function fitToGermany' site/index.html
           grep -q 'window.__startWBI' site/index.html
           grep -q 'legacy-engine-fix.js?v=2' site/index.html
-          grep -q 'ui-custom.js?v=2' site/index.html
+          grep -q 'ui-custom.js?v=3' site/index.html
           grep -q 'preparePaletteOnly' site/legacy-engine-fix.js
           grep -q 'fitPaletteToGermany' site/legacy-engine-fix.js
           grep -q 'sampleFittedStrict' site/legacy-engine-fix.js
+          grep -q 'MA' site/ui-custom.js
+          grep -q 'AKT' site/ui-custom.js
+          if grep -R -q 'MiMa\|Aktuell\|MiMa-Logo\|AKTUELL-Logo' site; then exit 1; fi
           node --check site/legacy-engine-fix.js
           node --check site/ui-custom.js
 
@@ -101,4 +105,4 @@ jobs:
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "Affine WBI-Anpassung und strikte DWD-Farbfilterung veröffentlicht"
+          commit_message: "Neutrale WBI-Oberfläche ohne Sendebezug veröffentlicht"

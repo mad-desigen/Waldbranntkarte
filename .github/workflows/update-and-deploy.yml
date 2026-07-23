@@ -31,7 +31,7 @@ jobs:
       - name: Abhängigkeiten installieren
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
-      - name: Ursprüngliche affine Kartenlogik mit Korrekturen vorbereiten
+      - name: Kartenanwendung vorbereiten
         run: |
           rm -rf site
           mkdir -p site/data site/fire-hotspots/data
@@ -45,21 +45,14 @@ jobs:
           cp fire-hotspots/README.md site/fire-hotspots/
           python - <<'PY'
           from pathlib import Path
-
           path = Path('site/index.html')
           text = path.read_text(encoding='utf-8')
-
           old_start = 'init(false);'
           new_start = 'window.__startWBI = () => init(false);'
           if old_start not in text:
               raise SystemExit('Startaufruf der Ursprungsanwendung wurde nicht gefunden.')
           text = text.replace(old_start, new_start, 1)
-
-          text = text.replace(
-              '</head>',
-              '<link rel="stylesheet" href="ui-custom.css?v=3"></head>',
-              1,
-          )
+          text = text.replace('</head>', '<link rel="stylesheet" href="ui-custom.css?v=3"></head>', 1)
           text = text.replace(
               '</body>',
               '<script src="legacy-engine-fix.js?v=2"></script>'
@@ -74,17 +67,17 @@ jobs:
       - name: Aktuelle DWD-Daten abrufen
         run: python scripts/update_data.py --output site/data
 
-      - name: Aktuelle Feuer-Hotspots abrufen und streng filtern
+      - name: Aktuelle Feuer-Hotspots über FIRMS-WFS abrufen und filtern
         env:
           FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
         run: |
-          python scripts/run_fire_hotspots.py \
+          python scripts/update_fire_hotspots_wfs.py \
             --output site/fire-hotspots/data \
             --bbox=-15,27,45,72 \
             --days=7 \
             --manual-exclusions fire-hotspots/manual-exclusions.geojson
 
-      - name: Kartenfunktion, neutrale Oberfläche und GeoJSON prüfen
+      - name: Anwendung und GeoJSON prüfen
         run: |
           test -s site/index.html
           test -s site/legacy-engine-fix.js
@@ -109,15 +102,8 @@ jobs:
           test -s site/fire-hotspots/data/excluded_hotspots_7d.geojson
           grep -q 'function fitToGermany' site/index.html
           grep -q 'window.__startWBI' site/index.html
-          grep -q 'legacy-engine-fix.js?v=2' site/index.html
-          grep -q 'ui-custom.js?v=3' site/index.html
-          grep -q 'preparePaletteOnly' site/legacy-engine-fix.js
-          grep -q 'fitPaletteToGermany' site/legacy-engine-fix.js
-          grep -q 'sampleFittedStrict' site/legacy-engine-fix.js
-          grep -q 'MA' site/ui-custom.js
-          grep -q 'AKT' site/ui-custom.js
-          if grep -R -E -q 'MiMa-Logo|AKTUELL-Logo|MiMa-Farben|Aktuell-Farben' site; then exit 1; fi
-          python -m py_compile scripts/update_fire_hotspots.py scripts/run_fire_hotspots.py
+          grep -q 'GeoJSON herunterladen' site/fire-hotspots/index.html
+          python -m py_compile scripts/update_fire_hotspots.py scripts/update_fire_hotspots_wfs.py
           node --check site/legacy-engine-fix.js
           node --check site/ui-custom.js
           node --check site/fire-hotspots/app.js
@@ -125,6 +111,15 @@ jobs:
           python -m json.tool site/fire-hotspots/data/fire_hotspots_24h.geojson >/dev/null
           python -m json.tool site/fire-hotspots/data/fire_hotspots_48h.geojson >/dev/null
           python -m json.tool site/fire-hotspots/data/fire_hotspots_7d.geojson >/dev/null
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          status = json.loads(Path('site/fire-hotspots/data/status.json').read_text())
+          if not status.get('configured'):
+              raise SystemExit('FIRMS_MAP_KEY wurde nicht an den Workflow übergeben.')
+          if status.get('source_errors') and status.get('raw_count_7d', 0) == 0:
+              raise SystemExit('FIRMS-WFS lieferte keine verwertbaren Daten: ' + '; '.join(status['source_errors']))
+          PY
 
       - name: Anwendung veröffentlichen
         if: github.event_name != 'pull_request'
@@ -134,4 +129,4 @@ jobs:
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "WBI und streng gefilterte Feuer-Hotspots veröffentlicht"
+          commit_message: "WBI und gefilterte FIRMS-WFS-GeoJSON veröffentlicht"

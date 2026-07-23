@@ -1,0 +1,35 @@
+{
+  "configured": true,
+  "generated_utc": "2026-07-23T13:56:57.489552Z",
+  "bbox": [
+    -15.0,
+    27.0,
+    45.0,
+    72.0
+  ],
+  "counts": {
+    "24h": 0,
+    "48h": 0,
+    "7d": 0
+  },
+  "agriculture_counts": {
+    "24h": 0,
+    "48h": 0,
+    "7d": 0
+  },
+  "raw_count_7d": 0,
+  "kept_count_7d": 0,
+  "excluded_count_7d": 0,
+  "exclusions": {},
+  "source_errors": [
+    "VIIRS_SNPP_NRT: FIRMS-Abruf fehlgeschlagen: HTTPSConnectionPool(host='firms2.modaps.eosdis.nasa.gov', port=443): Max retries exceeded with url: /api/area/csv/54b81a40804c5de9cbbac9375b582b91/VIIRS_SNPP_NRT/-15.0,27.0,45.0,72.0/2/2026-07-17 (Caused by NewConnectionError(\"HTTPSConnection(host='firms2.modaps.eosdis.nasa.gov', port=443): Failed to establish a new connection: [Errno 101] Network is unreachable\"))",
+    "VIIRS_SNPP_NRT: FIRMS-Abruf fehlgeschlagen: HTTPSConnectionPool(host='firms2.modaps.eosdis.nasa.gov', port=443): Max retries exceeded with url: /api/area/csv/54b81a40804c5de9cbbac9375b582b91/VIIRS_SNPP_NRT/-15.0,27.0,45.0,72.0/5 (Caused by NewConnectionError(\"HTTPSConnection(host='firms2.modaps.eosdis.nasa.gov', port=443): Failed to establish a new connection: [Errno 101] Network is unreachable\"))",
+    "VIIRS_NOAA20_NRT: FIRMS-Abruf fehlgeschlagen: HTTPSConnectionPool(host='firms2.modaps.eosdis.nasa.gov', port=443): Max retries exceeded with url: /api/area/csv/54b81a40804c5de9cbbac9375b582b91/VIIRS_NOAA20_NRT/-15.0,27.0,45.0,72.0/2/2026-07-17 (Caused by NewConnectionError(\"HTTPSConnection(host='firms2.modaps.eosdis.nasa.gov', port=443): Failed to establish a new connection: [Errno 101] Network is unreachable\"))",
+    "VIIRS_NOAA20_NRT: FIRMS-Abruf fehlgeschlagen: HTTPSConnectionPool(host='firms2.modaps.eosdis.nasa.gov', port=443): Max retries exceeded with url: /api/area/csv/54b81a40804c5de9cbbac9375b582b91/VIIRS_NOAA20_NRT/-15.0,27.0,45.0,72.0/5 (Caused by NewConnectionError(\"HTTPSConnection(host='firms2.modaps.eosdis.nasa.gov', port=443): Failed to establish a new connection: [Errno 101] Network is unreachable\"))",
+    "VIIRS_NOAA21_NRT: FIRMS-Abruf fehlgeschlagen: HTTPSConnectionPool(host='firms2.modaps.eosdis.nasa.gov', port=443): Max retries exceeded with url: /api/area/csv/54b81a40804c5de9cbbac9375b582b91/VIIRS_NOAA21_NRT/-15.0,27.0,45.0,72.0/2/2026-07-17 (Caused by NewConnectionError(\"HTTPSConnection(host='firms2.modaps.eosdis.nasa.gov', port=443): Failed to establish a new connection: [Errno 101] Network is unreachable\"))",
+    "VIIRS_NOAA21_NRT: FIRMS-Abruf fehlgeschlagen: HTTPSConnectionPool(host='firms2.modaps.eosdis.nasa.gov', port=443): Max retries exceeded with url: /api/area/csv/54b81a40804c5de9cbbac9375b582b91/VIIRS_NOAA21_NRT/-15.0,27.0,45.0,72.0/5 (Caused by NewConnectionError(\"HTTPSConnection(host='firms2.modaps.eosdis.nasa.gov', port=443): Failed to establish a new connection: [Errno 101] Network is unreachable\"))"
+  ],
+  "worldcover_errors": [],
+  "filter_version": "1.0.0",
+  "message": "FIRMS_MAP_KEY fehlt oder es konnten keine Daten erzeugt werden."
+}

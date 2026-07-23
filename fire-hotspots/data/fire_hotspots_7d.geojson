@@ -1,0 +1,24 @@
+{
+  "type": "FeatureCollection",
+  "name": "fire_hotspots_7d",
+  "metadata": {
+    "generated_utc": "2026-07-23T13:56:57.489552Z",
+    "bbox": [
+      -15.0,
+      27.0,
+      45.0,
+      72.0
+    ],
+    "sources": [
+      "VIIRS_SNPP_NRT",
+      "VIIRS_NOAA20_NRT",
+      "VIIRS_NOAA21_NRT"
+    ],
+    "filter_version": "1.0.0",
+    "filter_summary": "VIIRS NRT; niedrige Konfidenz, nicht-vegetative Landbedeckung, urbane/industrielle Nähe und isolierte ortsfeste Mehrtagessignale entfernt.",
+    "crs": "EPSG:4326",
+    "period": "7d",
+    "count": 0
+  },
+  "features": []
+}

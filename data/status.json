@@ -1,0 +1,83 @@
+{
+  "ok": true,
+  "updated_at": "2026-07-23T13:56:55.202686Z",
+  "updated_at_berlin": "2026-07-23T15:56:55.202686+02:00",
+  "dataset_date": "2026-07-23",
+  "timezone": "Europe/Berlin",
+  "max_source_age_hours": 48,
+  "states_source": "https://maps.dwd.de/geoserver/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=dwd%3AWarngebiete_Bundeslaender&outputFormat=application%2Fjson&srsName=EPSG%3A4326",
+  "state_feature_count": 16,
+  "images": [
+    {
+      "day": 0,
+      "forecast_date": "2026-07-23",
+      "source": "https://www.wettergefahren.de/DWD/warnungen/agrar/wbx/wbx_stationen.png",
+      "bytes": 15003,
+      "sha256": "a623adfa1e9d62d15001f009ea0e6a67415d9d2b5d25f06f7dfc4c38cb3a5a8e",
+      "fetched_at": "2026-07-23T13:56:55.202686Z",
+      "last_modified": "2026-07-23T04:15:20Z",
+      "source_age_hours": 9.69,
+      "etag": "\"3a9b-6573f8118a5ae\""
+    },
+    {
+      "day": 1,
+      "forecast_date": "2026-07-24",
+      "source": "https://www.wettergefahren.de/DWD/warnungen/agrar/wbx/wbx_stationen1kl.png",
+      "bytes": 42952,
+      "sha256": "705d06282347b42450e837d8e6c525b290810336510f836837690b2f154df32d",
+      "fetched_at": "2026-07-23T13:56:55.202686Z",
+      "last_modified": "2026-07-23T04:15:20Z",
+      "source_age_hours": 9.69,
+      "etag": "\"a7c8-6573f811a1ca8\""
+    },
+    {
+      "day": 2,
+      "forecast_date": "2026-07-25",
+      "source": "https://www.wettergefahren.de/DWD/warnungen/agrar/wbx/wbx_stationen2kl.png",
+      "bytes": 43908,
+      "sha256": "1febe5c5a3ed63305439947d02daaeeb0aab0f46c926bac1e2e14edd50283f3d",
+      "fetched_at": "2026-07-23T13:56:55.202686Z",
+      "last_modified": "2026-07-23T04:15:20Z",
+      "source_age_hours": 9.69,
+      "etag": "\"ab84-6573f811a0d0d\""
+    },
+    {
+      "day": 3,
+      "forecast_date": "2026-07-26",
+      "source": "https://www.wettergefahren.de/DWD/warnungen/agrar/wbx/wbx_stationen3kl.png",
+      "bytes": 45341,
+      "sha256": "f0acb2b0faf42915dc00e4093427449f22d7ef5cd4651958b5fb371d2c1060b0",
+      "fetched_at": "2026-07-23T13:56:55.202686Z",
+      "last_modified": "2026-07-23T04:15:20Z",
+      "source_age_hours": 9.69,
+      "etag": "\"b11d-6573f811a43c3\""
+    },
+    {
+      "day": 4,
+      "forecast_date": "2026-07-27",
+      "source": "https://www.wettergefahren.de/DWD/warnungen/agrar/wbx/wbx_stationen4kl.png",
+      "bytes": 38797,
+      "sha256": "a32a0a8ccb1ca10f3af0c65650979ac09e3f2a49cd61899185c9fee6589af127",
+      "fetched_at": "2026-07-23T13:56:55.202686Z",
+      "last_modified": "2026-07-23T04:15:20Z",
+      "source_age_hours": 9.69,
+      "etag": "\"978d-6573f811a301d\""
+    }
+  ],
+  "available_days": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "forecast_dates": {
+    "0": "2026-07-23",
+    "1": "2026-07-24",
+    "2": "2026-07-25",
+    "3": "2026-07-26",
+    "4": "2026-07-27"
+  },
+  "warnings": [],
+  "stale": false
+}

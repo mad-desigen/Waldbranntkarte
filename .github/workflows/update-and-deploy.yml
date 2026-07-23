@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths-ignore: ["data/**"]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: "17 */3 * * *"
@@ -12,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: wbi-publish
+  group: wbi-publish-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -124,6 +126,7 @@ jobs:
           python -m json.tool site/fire-hotspots/data/fire_hotspots_7d.geojson >/dev/null
 
       - name: Anwendung veröffentlichen
+        if: github.event_name != 'pull_request'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

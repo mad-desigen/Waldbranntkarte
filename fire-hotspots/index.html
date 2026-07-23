@@ -1,40 +1,79 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
-<title>Feuer-Hotspots Europa – aktuelle Lage</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<style>
-:root{--petrol:#235c7a;--bordeaux:#a6254b;--creme:#fff8ef;--sand:#e9e4d9;--anthrazit:#3d3e46;--orange:#ff8b00;--rot:#c61e1e;--gelb:#fec804}
-*{box-sizing:border-box}html,body{margin:0;background:var(--anthrazit);font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}#page{max-width:1600px;margin:auto;background:var(--creme)}header{background:var(--petrol);color:var(--creme);padding:18px 28px}header h1{margin:0;font-size:27px}header p{margin:5px 0 0;color:var(--sand);font-size:14px}#capture{background:var(--creme)}#mapwrap{position:relative;width:100%;aspect-ratio:16/9;background:#0b1622}#map{position:absolute;inset:0}.panel,.legend{position:absolute;z-index:1000;background:rgba(35,92,122,.94);color:var(--creme);border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.35)}.panel{top:12px;left:12px;padding:12px 14px;font-size:13px;max-width:245px}.panel h2{margin:0 0 8px;font-size:14px;text-transform:uppercase;color:var(--gelb)}.panel label{display:flex;align-items:center;gap:7px;margin:6px 0}.panel input[type=checkbox]{accent-color:var(--gelb);width:15px;height:15px}.daterow{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.daterow button{background:var(--creme);color:var(--petrol);border:0;border-radius:5px;padding:6px 10px;font-weight:600;cursor:pointer}.daterow button.active{background:var(--gelb)}.daterow input{font-size:12px;padding:5px;border:0;border-radius:5px;width:100%;margin-top:6px}#datumAnzeige{margin-top:8px;color:var(--sand);font-size:12px}.legend{bottom:12px;left:12px;padding:10px 14px;font-size:12.5px}.dot{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--rot);margin-right:7px;box-shadow:0 0 4px var(--orange)}#exportbtn{position:absolute;top:12px;right:12px;z-index:1000;background:var(--bordeaux);color:var(--creme);border:0;border-radius:6px;padding:9px 14px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35)}#status{position:absolute;right:12px;bottom:12px;z-index:1000;background:rgba(0,0,0,.62);color:white;padding:6px 10px;border-radius:5px;font-size:11px}footer{padding:12px 28px 18px;background:var(--creme);color:var(--petrol);font-size:12px;line-height:1.5}footer a{color:var(--petrol)}.leaflet-control-attribution{font-size:10px}@media(max-width:700px){header h1{font-size:21px}.panel{max-width:205px}#exportbtn{top:auto;bottom:12px}.legend{display:none}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gefilterte Feuer-Hotspots Europa</title>
+  <meta name="description" content="Aktuelle, streng gefilterte VIIRS-Feuer-Hotspots für Europa als interaktive Karte und GeoJSON.">
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="styles.css?v=2">
 </head>
 <body>
-<div id="page"><div id="capture">
-<header><h1>Feuer-Hotspots Europa – aktuelle Lage</h1><p>Aktuelle VIIRS-Feuer- und Hitzesignaturen direkt aus NASA GIBS/LANCE – ohne API-Schlüssel</p></header>
-<div id="mapwrap"><div id="map"></div>
-<div class="panel"><h2>Satelliten</h2><label><input type="checkbox" id="lyrNoaa20" checked> VIIRS / NOAA-20</label><label><input type="checkbox" id="lyrSnpp" checked> VIIRS / Suomi-NPP</label><div class="daterow"><button id="btnHeute" class="active">Heute</button><button id="btnGestern">Gestern</button><input type="date" id="datumInput"></div><div id="datumAnzeige"></div></div>
-<div class="legend"><span class="dot"></span>VIIRS-Feuer-/Hitzesignatur, 375 m</div><button id="exportbtn">Als PNG exportieren</button><div id="status">Kartenkacheln laden …</div></div>
-<footer><strong>Quelle:</strong> NASA GIBS/LANCE, VIIRS NOAA-20 und Suomi-NPP. Basiskarte: CARTO / OpenStreetMap. <strong>Hinweis:</strong> Diese WMS-Ebenen zeigen thermische Anomalien. Industrie, Gasfackeln und Agrarfeuer können enthalten sein. Eine belastbare Trennung ist aus den Rasterkacheln allein nicht möglich.</footer>
-</div></div>
-<script>
-(function(){
-const map=L.map('map',{zoomControl:true,worldCopyJump:true,minZoom:2}).setView([49,12],4);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:10,crossOrigin:true,attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
-function isoDate(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-const heute=new Date(),gestern=new Date();gestern.setDate(heute.getDate()-1);let datum=isoDate(heute);
-const wms='https://{s}.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi',subs=['gibs-a','gibs-b','gibs-c'];let noaa,snpp;
-function layer(name){return L.tileLayer.wms(wms,{subdomains:subs,layers:name,format:'image/png',transparent:true,version:'1.1.1',crossOrigin:true,TIME:datum+'T00:00:00Z',attribution:'NASA GIBS/LANCE'})}
-function rebuild(){if(noaa)map.removeLayer(noaa);if(snpp)map.removeLayer(snpp);noaa=layer('VIIRS_NOAA20_Thermal_Anomalies_375m_All');snpp=layer('VIIRS_SNPP_Thermal_Anomalies_375m_All');if(lyrNoaa20.checked)noaa.addTo(map);if(lyrSnpp.checked)snpp.addTo(map);datumAnzeige.textContent='Kartendatum: '+datum;status.style.display='block';status.textContent='Kacheln werden geladen …';setTimeout(()=>status.style.display='none',4500)}
-lyrNoaa20.onchange=e=>e.target.checked?noaa.addTo(map):map.removeLayer(noaa);lyrSnpp.onchange=e=>e.target.checked?snpp.addTo(map):map.removeLayer(snpp);
-const btnHeute=document.getElementById('btnHeute'),btnGestern=document.getElementById('btnGestern'),datumInput=document.getElementById('datumInput');datumInput.value=datum;
-function active(btn){btnHeute.classList.remove('active');btnGestern.classList.remove('active');if(btn)btn.classList.add('active')}
-btnHeute.onclick=()=>{datum=isoDate(heute);datumInput.value=datum;active(btnHeute);rebuild()};btnGestern.onclick=()=>{datum=isoDate(gestern);datumInput.value=datum;active(btnGestern);rebuild()};datumInput.onchange=()=>{if(datumInput.value){datum=datumInput.value;active(null);rebuild()}};
-rebuild();
-exportbtn.onclick=()=>{status.style.display='block';status.textContent='Export läuft …';html2canvas(capture,{useCORS:true,allowTaint:false,backgroundColor:'#fff8ef',scale:Math.max(1,1920/capture.offsetWidth)}).then(canvas=>{const a=document.createElement('a');a.download=datum+'_Feuer-Hotspots_Europa.png';a.href=canvas.toDataURL('image/png');a.click();status.style.display='none'}).catch(()=>status.textContent='Export fehlgeschlagen – bitte Bildschirmfoto verwenden.')};
-})();
-</script>
-</body></html>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">VIIRS · NASA FIRMS · ESA WorldCover</p>
+        <h1>Gefilterte Feuer-Hotspots Europa</h1>
+        <p class="subtitle">Nur Vegetationsflächen; niedrige Konfidenz, bebaute/industrielle Nähe, Wasser und ortsfeste Dauerquellen werden ausgeschlossen.</p>
+      </div>
+      <a class="secondary-button" href="../" aria-label="Zur Waldbrandgefahrenkarte">Waldbrandgefahr</a>
+    </header>
+
+    <section class="controlbar" aria-label="Kartensteuerung">
+      <div class="segmented" role="group" aria-label="Zeitraum">
+        <button class="period-button active" data-period="24h">24 Stunden</button>
+        <button class="period-button" data-period="48h">48 Stunden</button>
+        <button class="period-button" data-period="7d">7 Tage</button>
+      </div>
+
+      <label class="toggle">
+        <input id="agriculture-toggle" type="checkbox" checked>
+        <span>Agrarfeuer einbeziehen</span>
+      </label>
+
+      <label class="select-label">
+        <span>Mindestqualität</span>
+        <select id="quality-select">
+          <option value="all">Nominal + hoch</option>
+          <option value="high">Nur hohe Konfidenz</option>
+          <option value="consensus">Mindestens 2 Satelliten</option>
+        </select>
+      </label>
+
+      <a id="download-link" class="primary-button" href="data/fire_hotspots_24h.geojson" download>GeoJSON herunterladen</a>
+    </section>
+
+    <section class="status-row" aria-live="polite">
+      <span id="status-message" class="status-pill">Daten werden geladen …</span>
+      <span id="count-message" class="status-pill muted"></span>
+      <span id="time-message" class="status-pill muted"></span>
+    </section>
+
+    <section class="map-card">
+      <div id="map" aria-label="Karte der gefilterten Feuer-Hotspots"></div>
+      <div class="legend" aria-label="Legende">
+        <strong>Feuerintensität (FRP)</strong>
+        <span><i class="dot small"></i> niedrig</span>
+        <span><i class="dot medium"></i> mittel</span>
+        <span><i class="dot large"></i> hoch</span>
+      </div>
+    </section>
+
+    <section class="download-grid">
+      <a href="data/fire_hotspots_24h.geojson" download><strong>24 h</strong><span>GeoJSON</span></a>
+      <a href="data/fire_hotspots_48h.geojson" download><strong>48 h</strong><span>GeoJSON</span></a>
+      <a href="data/fire_hotspots_7d.geojson" download><strong>7 Tage</strong><span>GeoJSON</span></a>
+    </section>
+
+    <aside class="method-note">
+      <h2>Filterlogik</h2>
+      <p>Ausgegeben werden VIIRS-NRT-Erkennungen auf vegetationsgeprägten ESA-WorldCover-Klassen. Ausgeschlossen werden niedrige Konfidenz, bebaute Flächen, deutliche urbane Nähe, Wasser/Schnee/karge Flächen sowie eng ortsfeste und räumlich isolierte Mehrtagessignale. Das reduziert Industrie, Fackeln und andere stationäre Wärmequellen deutlich.</p>
+      <p><strong>Hinweis:</strong> Satellitendaten können reale Brände übersehen oder einzelne zweifelhafte Punkte enthalten. Die Karte ist keine Einsatz- oder Evakuierungsgrundlage.</p>
+    </aside>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js?v=2"></script>
+</body>
+</html>

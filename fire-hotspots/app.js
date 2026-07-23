@@ -6,31 +6,26 @@
     includeAgriculture: true,
     quality: "all",
     data: null,
-    layer: null,
+    vectorLayer: null,
+    gibsLayers: [],
   };
 
   const map = L.map("map", {
     zoomControl: true,
-    minZoom: 3,
+    minZoom: 2,
     maxZoom: 15,
     preferCanvas: true,
+    worldCopyJump: true,
   }).setView([49.5, 11], 4);
 
   L.tileLayer(
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    {
-      maxZoom: 19,
-      attribution: "Tiles © Esri, Maxar, Earthstar Geographics",
-    },
+    { maxZoom: 19, attribution: "Tiles © Esri, Maxar, Earthstar Geographics" },
   ).addTo(map);
 
   L.tileLayer(
     "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-    {
-      maxZoom: 19,
-      pane: "overlayPane",
-      attribution: "Grenzen und Orte © Esri",
-    },
+    { maxZoom: 19, pane: "overlayPane", attribution: "Grenzen und Orte © Esri" },
   ).addTo(map);
 
   const statusMessage = document.querySelector("#status-message");
@@ -54,8 +49,53 @@
     }).format(new Date(value));
   };
 
+  const isoDate = (date) => {
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(date.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  const addGibsLayer = (layerName, date) => {
+    const layer = L.tileLayer.wms(
+      "https://{s}.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi",
+      {
+        subdomains: ["gibs-a", "gibs-b", "gibs-c"],
+        layers: layerName,
+        format: "image/png",
+        transparent: true,
+        version: "1.1.1",
+        crossOrigin: true,
+        TIME: `${date}T00:00:00Z`,
+        opacity: 1,
+        attribution: "NASA GIBS/LANCE (VIIRS)",
+      },
+    );
+    layer.addTo(map);
+    state.gibsLayers.push(layer);
+  };
+
+  const rebuildGibs = () => {
+    state.gibsLayers.forEach((layer) => map.removeLayer(layer));
+    state.gibsLayers = [];
+
+    const days = state.period === "7d" ? 7 : state.period === "48h" ? 2 : 1;
+    const today = new Date();
+
+    for (let offset = 0; offset < days; offset += 1) {
+      const date = new Date(today);
+      date.setUTCDate(today.getUTCDate() - offset);
+      const day = isoDate(date);
+      addGibsLayer("VIIRS_NOAA20_Thermal_Anomalies_375m_All", day);
+      addGibsLayer("VIIRS_SNPP_Thermal_Anomalies_375m_All", day);
+    }
+
+    countMessage.textContent = "Live-VIIRS-Feuerpunkte geladen";
+    timeMessage.textContent = `Kartendatum: ${isoDate(today)}`;
+  };
+
   const filteredFeatures = () => {
-    if (!state.data) return [];
+    if (!state.data?.features) return [];
     return state.data.features.filter((feature) => {
       const p = feature.properties || {};
       if (!state.includeAgriculture && p.agricultural) return false;
@@ -70,40 +110,21 @@
     return Math.max(4, Math.min(13, 4 + Math.sqrt(value) * 1.1));
   };
 
-  const popupHtml = (feature) => {
-    const p = feature.properties || {};
-    return `
-      <strong>Feuer-Hotspot</strong>
-      <div class="popup-grid">
-        <span>Zeit</span><span>${formatDate(p.acquired_utc)}</span>
-        <span>FRP</span><span>${p.frp_mw == null ? "–" : `${Number(p.frp_mw).toFixed(1)} MW`}</span>
-        <span>Konfidenz</span><span>${p.confidence === "h" ? "hoch" : "nominal"}</span>
-        <span>Landbedeckung</span><span>${p.landcover || "–"}</span>
-        <span>Satelliten</span><span>${p.sensor_count_4h_1_2km || 1}</span>
-        <span>Quelle</span><span>${p.satellite || p.source || "VIIRS"}</span>
-      </div>`;
-  };
-
-  const render = () => {
-    if (state.layer) map.removeLayer(state.layer);
+  const renderVectors = () => {
+    if (state.vectorLayer) map.removeLayer(state.vectorLayer);
     const features = filteredFeatures();
-    const collection = { type: "FeatureCollection", features };
-
-    state.layer = L.geoJSON(collection, {
+    state.vectorLayer = L.geoJSON({ type: "FeatureCollection", features }, {
       pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
         radius: markerRadius(feature.properties?.frp_mw),
         color: "#ffb44a",
         weight: 0.8,
         fillColor: "#ff3d1f",
         fillOpacity: 0.88,
-        className: "fire-marker",
       }),
-      onEachFeature: (feature, layer) => layer.bindPopup(popupHtml(feature)),
     }).addTo(map);
 
-    countMessage.textContent = `${features.length.toLocaleString("de-DE")} Punkte angezeigt`;
-    if (features.length && state.layer.getBounds().isValid()) {
-      map.fitBounds(state.layer.getBounds(), { padding: [28, 28], maxZoom: 6 });
+    if (features.length) {
+      countMessage.textContent = `${features.length.toLocaleString("de-DE")} GeoJSON-Punkte + Live-VIIRS`;
     }
   };
 
@@ -112,50 +133,41 @@
     document.querySelectorAll(".period-button").forEach((button) => {
       button.classList.toggle("active", button.dataset.period === period);
     });
+
+    rebuildGibs();
+    setStatus("Live-VIIRS-Feuerpunkte über NASA GIBS");
+
     const url = `data/fire_hotspots_${period}.geojson`;
     downloadLink.href = url;
-    setStatus("GeoJSON wird geladen …");
+
     try {
       const response = await fetch(`${url}?v=${Date.now()}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       state.data = await response.json();
-      setStatus("Streng gefilterte Vegetationsfeuer");
-      timeMessage.textContent = `Stand: ${formatDate(state.data.metadata?.generated_utc)}`;
-      render();
-    } catch (error) {
-      console.error(error);
-      state.data = { type: "FeatureCollection", features: [] };
-      setStatus("GeoJSON konnte nicht geladen werden.", true);
-      countMessage.textContent = "";
-      timeMessage.textContent = "";
-      render();
-    }
-  };
-
-  const loadStatus = async () => {
-    try {
-      const response = await fetch(`data/status.json?v=${Date.now()}`, { cache: "no-store" });
-      if (!response.ok) return;
-      const status = await response.json();
-      if (!status.configured) {
-        setStatus(status.message || "FIRMS_MAP_KEY ist noch nicht eingerichtet.", true);
+      renderVectors();
+      if (state.data?.metadata?.generated_utc) {
+        timeMessage.textContent = `Stand: ${formatDate(state.data.metadata.generated_utc)}`;
       }
     } catch (error) {
-      console.warn("Status konnte nicht geladen werden", error);
+      console.warn("GeoJSON nicht verfügbar", error);
+      state.data = { type: "FeatureCollection", features: [] };
+      renderVectors();
     }
   };
 
   document.querySelectorAll(".period-button").forEach((button) => {
     button.addEventListener("click", () => loadPeriod(button.dataset.period));
   });
+
   agricultureToggle.addEventListener("change", () => {
     state.includeAgriculture = agricultureToggle.checked;
-    render();
-  });
-  qualitySelect.addEventListener("change", () => {
-    state.quality = qualitySelect.value;
-    render();
+    renderVectors();
   });
 
-  Promise.all([loadPeriod("24h"), loadStatus()]);
+  qualitySelect.addEventListener("change", () => {
+    state.quality = qualitySelect.value;
+    renderVectors();
+  });
+
+  loadPeriod("24h");
 })();

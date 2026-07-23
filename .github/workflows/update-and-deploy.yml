@@ -76,7 +76,7 @@ jobs:
 
       - name: Aktuelle Feuer-Hotspots abrufen und streng filtern
         env:
-          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          FIRMS_MAP_KEY: ${{ secrets.54b81a40804c5de9cbbac9375b582b91 }}
         run: |
           python scripts/update_fire_hotspots.py \
             --output site/fire-hotspots/data \

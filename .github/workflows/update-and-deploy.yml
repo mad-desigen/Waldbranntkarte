@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths-ignore: ["data/**"]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: "17 */3 * * *"
@@ -12,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: wbi-publish
+  group: wbi-publish-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -32,13 +34,15 @@ jobs:
       - name: Ursprüngliche affine Kartenlogik mit Korrekturen vorbereiten
         run: |
           rm -rf site
-          mkdir -p site/data
+          mkdir -p site/data site/fire-hotspots/data
           curl -L --fail --retry 4 --retry-delay 2 \
             "https://raw.githubusercontent.com/mad-desigen/Waldbranntkarte/6f93769615ae1ea3ce578ede1b7837675e0f91d3/index.html" \
             -o site/index.html
           cp legacy-engine-fix.js ui-custom.js ui-custom.css site/
           cp WBI_GEOlayers_Einfaerben_MA.jsx site/
           cp WBI_GEOlayers_Einfaerben_AKT.jsx site/
+          cp fire-hotspots/index.html fire-hotspots/app.js fire-hotspots/styles.css site/fire-hotspots/
+          cp fire-hotspots/README.md site/fire-hotspots/
           python - <<'PY'
           from pathlib import Path
 
@@ -70,7 +74,17 @@ jobs:
       - name: Aktuelle DWD-Daten abrufen
         run: python scripts/update_data.py --output site/data
 
-      - name: Kartenfunktion, neutrale Oberfläche und Farbfilterung prüfen
+      - name: Aktuelle Feuer-Hotspots abrufen und streng filtern
+        env:
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+        run: |
+          python scripts/update_fire_hotspots.py \
+            --output site/fire-hotspots/data \
+            --bbox=-15,27,45,72 \
+            --days=7 \
+            --manual-exclusions fire-hotspots/manual-exclusions.geojson
+
+      - name: Kartenfunktion, neutrale Oberfläche und GeoJSON prüfen
         run: |
           test -s site/index.html
           test -s site/legacy-engine-fix.js
@@ -85,6 +99,14 @@ jobs:
           test -s site/data/wbi_2.png
           test -s site/data/wbi_3.png
           test -s site/data/wbi_4.png
+          test -s site/fire-hotspots/index.html
+          test -s site/fire-hotspots/app.js
+          test -s site/fire-hotspots/styles.css
+          test -s site/fire-hotspots/data/status.json
+          test -s site/fire-hotspots/data/fire_hotspots_24h.geojson
+          test -s site/fire-hotspots/data/fire_hotspots_48h.geojson
+          test -s site/fire-hotspots/data/fire_hotspots_7d.geojson
+          test -s site/fire-hotspots/data/excluded_hotspots_7d.geojson
           grep -q 'function fitToGermany' site/index.html
           grep -q 'window.__startWBI' site/index.html
           grep -q 'legacy-engine-fix.js?v=2' site/index.html
@@ -94,15 +116,22 @@ jobs:
           grep -q 'sampleFittedStrict' site/legacy-engine-fix.js
           grep -q 'MA' site/ui-custom.js
           grep -q 'AKT' site/ui-custom.js
-          if grep -R -q 'MiMa\|Aktuell\|MiMa-Logo\|AKTUELL-Logo' site; then exit 1; fi
+          if grep -R -E -q 'MiMa-Logo|AKTUELL-Logo|MiMa-Farben|Aktuell-Farben' site; then exit 1; fi
+          python -m py_compile scripts/update_fire_hotspots.py
           node --check site/legacy-engine-fix.js
           node --check site/ui-custom.js
+          node --check site/fire-hotspots/app.js
+          python -m json.tool site/fire-hotspots/data/status.json >/dev/null
+          python -m json.tool site/fire-hotspots/data/fire_hotspots_24h.geojson >/dev/null
+          python -m json.tool site/fire-hotspots/data/fire_hotspots_48h.geojson >/dev/null
+          python -m json.tool site/fire-hotspots/data/fire_hotspots_7d.geojson >/dev/null
 
       - name: Anwendung veröffentlichen
+        if: github.event_name != 'pull_request'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
-          commit_message: "Neutrale WBI-Oberfläche ohne Sendebezug veröffentlicht"
+          commit_message: "WBI und streng gefilterte Feuer-Hotspots veröffentlicht"

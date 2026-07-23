@@ -22,6 +22,8 @@ Für den automatischen FIRMS-Abruf wird einmalig ein kostenloser NASA-FIRMS-Schl
 4. Als Wert den persönlichen NASA-FIRMS-MAP_KEY eintragen.
 5. Den Workflow **Stabile WBI-Kartenanwendung veröffentlichen** manuell starten oder den nächsten automatischen Lauf abwarten.
 
+Nach dem Eintragen oder Aktualisieren des Secrets muss der Workflow einmal erneut ausgeführt werden, damit die veröffentlichten GeoJSON-Dateien ersetzt werden.
+
 Die Hotspot-Anwendung wird anschließend unter `/fire-hotspots/` veröffentlicht. Sie entfernt niedrige Konfidenz, nicht-vegetative Landbedeckung, bebaute/industrielle Nähe und isolierte ortsfeste Mehrtagessignale. Verworfene Punkte werden getrennt als Kontroll-GeoJSON ausgegeben und niemals auf der Hauptkarte angezeigt.
 
 ## Veröffentlichung

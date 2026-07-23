@@ -78,7 +78,7 @@ jobs:
         env:
           FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
         run: |
-          python scripts/update_fire_hotspots.py \
+          python scripts/run_fire_hotspots.py \
             --output site/fire-hotspots/data \
             --bbox=-15,27,45,72 \
             --days=7 \
@@ -117,7 +117,7 @@ jobs:
           grep -q 'MA' site/ui-custom.js
           grep -q 'AKT' site/ui-custom.js
           if grep -R -E -q 'MiMa-Logo|AKTUELL-Logo|MiMa-Farben|Aktuell-Farben' site; then exit 1; fi
-          python -m py_compile scripts/update_fire_hotspots.py
+          python -m py_compile scripts/update_fire_hotspots.py scripts/run_fire_hotspots.py
           node --check site/legacy-engine-fix.js
           node --check site/ui-custom.js
           node --check site/fire-hotspots/app.js

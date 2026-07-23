@@ -116,7 +116,8 @@ jobs:
           grep -q 'sampleFittedStrict' site/legacy-engine-fix.js
           grep -q 'MA' site/ui-custom.js
           grep -q 'AKT' site/ui-custom.js
-          if grep -R -q 'MiMa\|Aktuell\|MiMa-Logo\|AKTUELL-Logo' site; then exit 1; fi
+          if grep -R -E -q 'MiMa-Logo|AKTUELL-Logo|MiMa-Farben|Aktuell-Farben' site; then exit 1; fi
+          python -m py_compile scripts/update_fire_hotspots.py
           node --check site/legacy-engine-fix.js
           node --check site/ui-custom.js
           node --check site/fire-hotspots/app.js
